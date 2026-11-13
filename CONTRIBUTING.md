@@ -7,8 +7,8 @@ in short form.
 ## CLA
 
 Contributions need a signed CLA (`CLA.md`). CLA Assistant asks you to sign once on
-your first pull request. Code under another licence (for example from Zed or
-Servo) must keep its header and be listed in `NOTICE`.
+your first pull request. Code under another licence (for example from
+Servo or GPUI-CE) must keep its header and be listed in `NOTICE`.
 
 ## Workflow: local green is the gate
 

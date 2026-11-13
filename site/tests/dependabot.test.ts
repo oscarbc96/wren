@@ -53,12 +53,12 @@ if (config) {
       }
     });
 
-    test("cargo ignores the pinned Zed git crates", () => {
+    test("cargo ignores the pinned GPUI-CE crates", () => {
       const cargo = config!.updates.find(
         (u) => u["package-ecosystem"] === "cargo",
       );
       const names = cargo?.ignore?.map((i) => i["dependency-name"]) ?? [];
-      for (const n of ["gpui", "gpui_platform", "gpui_apple", "theme"]) {
+      for (const n of ["gpui-ce", "gpui_ce_platform", "gpui_ce_elements", "servo"]) {
         expect(names).toContain(n);
       }
     });
