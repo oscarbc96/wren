@@ -15,6 +15,7 @@ store = { path = "../store" }
 omnibox = { path = "../omnibox" }
 settings = { path = "../settings" }
 themes = { path = "../themes" }
+creds = { path = "../creds" }
 gpui = { workspace = true }
 gpui_platform = { workspace = true, default-features = false, features = ["font-kit"] }
 clap = { workspace = true }
