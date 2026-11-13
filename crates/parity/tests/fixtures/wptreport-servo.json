@@ -1,0 +1,21 @@
+{
+  "results": [
+    {
+      "test": "/dom/foo.html",
+      "status": "PASS",
+      "subtests": [
+        { "status": "PASS" },
+        { "status": "FAIL" },
+        { "status": "PASS" }
+      ]
+    },
+    {
+      "test": "/css/bar.html",
+      "status": "FAIL",
+      "subtests": [
+        { "status": "PASS" },
+        { "status": "PASS" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+https://en.wikipedia.org/wiki/Rust_(programming_language)
+https://github.com/servo/servo
+https://developer.mozilla.org/en-US/docs/Web/HTML
+https://www.rust-lang.org/
+https://news.ycombinator.com/
+https://doc.rust-lang.org/book/
+https://en.wikipedia.org/wiki/Web_browser
+https://github.com/zed-industries/zed
+https://developer.mozilla.org/en-US/docs/Web/CSS
+https://www.mozilla.org/en-US/
