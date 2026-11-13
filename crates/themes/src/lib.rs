@@ -162,8 +162,6 @@ pub const DEFAULT_LIGHT: &str = "Wren Light";
 pub const DEFAULT_DARK: &str = "Wren Dark";
 
 /// Built-in family JSON strings.
-pub const BUILTIN_LIGHT_JSON: &str = include_str!("../../../assets/themes/wren-light.json");
-pub const BUILTIN_DARK_JSON: &str = include_str!("../../../assets/themes/wren-dark.json");
 pub const BUILTIN_WREN_JSON: &str = include_str!("../../../assets/themes/wren.json");
 pub const BUILTIN_FAMILIES: &[&str] = &[BUILTIN_WREN_JSON];
 
