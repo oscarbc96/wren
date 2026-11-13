@@ -36,10 +36,10 @@ pub fn derive_key(password: &[u8]) -> [u8; 16] {
 }
 
 fn chrome_safe_storage_key() -> Result<Vec<u8>> {
-    if let Ok(marker) = std::env::var("WREN_CHROME_SAFE_STORAGE_KEY") {
-        if marker == "missing" {
-            bail!("Chrome Safe Storage key unavailable");
-        }
+    if let Ok(marker) = std::env::var("WREN_CHROME_SAFE_STORAGE_KEY")
+        && marker == "missing"
+    {
+        bail!("Chrome Safe Storage key unavailable");
     }
     if let Ok(hex) = std::env::var("WREN_CHROME_SAFE_STORAGE_KEY_HEX") {
         let bytes = decode_hex(&hex).context("invalid WREN_CHROME_SAFE_STORAGE_KEY_HEX")?;
@@ -63,7 +63,7 @@ fn chrome_safe_storage_key() -> Result<Vec<u8>> {
 
 fn decode_hex(s: &str) -> Option<Vec<u8>> {
     let s = s.trim();
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         return None;
     }
     (0..s.len())

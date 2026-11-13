@@ -39,7 +39,7 @@ pub struct BrowserWindow<E: Engine + 'static, S: Store + 'static> {
 }
 
 impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
-    pub fn new(mut engine: E, store: Arc<S>, settings: Settings, cx: &mut Context<Self>) -> Self {
+    pub fn new(engine: E, store: Arc<S>, settings: Settings, cx: &mut Context<Self>) -> Self {
         let cred_store: Arc<dyn creds::CredStore + Send + Sync> =
             Arc::new(creds::KeychainStore::new("wren.passwords"));
         Self::new_with_creds(engine, store, cred_store, settings, cx)
@@ -73,7 +73,7 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
 
     /// Opens one tab per URL, the first one active, without a leading blank tab.
     pub fn with_urls(
-        mut engine: E,
+        engine: E,
         store: Arc<S>,
         settings: Settings,
         urls: Vec<Url>,
@@ -709,11 +709,11 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
         let Some(tab) = self.active_tab().cloned() else {
             return;
         };
-        if let Some(list) = &self.password_picker {
-            if let Some(c) = list.get(idx) {
-                let js = creds::fill_script(&c.username, &c.password);
-                self.engine.run_script(tab.webview, &js);
-            }
+        if let Some(list) = &self.password_picker
+            && let Some(c) = list.get(idx)
+        {
+            let js = creds::fill_script(&c.username, &c.password);
+            self.engine.run_script(tab.webview, &js);
         }
         self.password_picker = None;
     }
