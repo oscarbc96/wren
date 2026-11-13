@@ -1,0 +1,66 @@
+name: Parity
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * 0"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: parity-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_INCREMENTAL: "0"
+  TURBO_TELEMETRY_DISABLED: "1"
+  CARGO_TERM_COLOR: always
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  CARGO_PROFILE_TEST_DEBUG: line-tables-only
+
+jobs:
+  wpt:
+    name: WPT parity
+    runs-on: macos-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain || true
+      - name: Set up tools
+        uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
+        with:
+          cache: true
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-on-failure: true
+      - name: Checkout WPT
+        run: |
+          git clone --filter=blob:none https://github.com/web-platform-tests/wpt target/wpt
+          git -C target/wpt fetch --depth=1 origin 42a198aaaf3fa15c17dc25bff625654bec3390c3
+          git -C target/wpt checkout 42a198aaaf3fa15c17dc25bff625654bec3390c3
+      - name: Run WPT for servo
+        env:
+          SERVOSHELL_BIN: ${{ env.SERVOSHELL_BIN }}
+        run: |
+          ./target/wpt/wpt run --log-wptreport=servo.json ${SERVOSHELL_BIN} $(cat crates/parity/wpt-include.txt | tr '\n' ' ') || true
+      - name: Run WPT for chrome
+        run: |
+          /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --version
+          ./target/wpt/wpt run --log-wptreport=chrome.json chrome $(cat crates/parity/wpt-include.txt | tr '\n' ' ') || true
+      - name: Diff
+        run: |
+          cargo run -p parity -- wpt-diff servo.json chrome.json --out parity-diff.md
+          cat parity-diff.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload reports
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: wpt-reports
+          path: |
+            servo.json
+            chrome.json
+            parity-diff.md
