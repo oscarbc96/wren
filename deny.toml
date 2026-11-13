@@ -28,6 +28,8 @@ allow = [
   "blessing",
   "CDLA-Permissive-2.0",
   "BSL-1.0",
+  # LLVM-style permissive licence (libfuzzer-sys via image codecs).
+  "NCSA",
   # libtomcrypt inside sqlcipher-src (bundled SQLCipher).
   "WTFPL",
   # Wren itself (and the template code it reuses).
@@ -42,6 +44,4 @@ wildcards = "allow"
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
-allow-git = [
-  "https://github.com/gfx-rs/wgpu",
-]
+allow-git = []
