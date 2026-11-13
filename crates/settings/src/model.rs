@@ -104,4 +104,3 @@ pub struct Settings {
     pub startup: StartupSettings,
     pub tabs: TabSettings,
 }
-
