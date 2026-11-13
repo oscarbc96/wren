@@ -1,3 +1,6 @@
 fn main() {
-    if engine::content_process_main().is_some() {}
+    if engine::content_process_main().is_some() {
+        return;
+    }
+    wren::run();
 }

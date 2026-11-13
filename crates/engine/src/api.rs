@@ -65,4 +65,5 @@ pub trait Engine {
     fn hide(&mut self, id: WebViewId);
     fn spin(&mut self);
     fn drain_events(&mut self) -> Vec<EngineEvent>;
+    fn shutdown(&mut self) {}
 }

@@ -443,6 +443,10 @@ impl Engine for ServoEngine {
     fn drain_events(&mut self) -> Vec<EngineEvent> {
         self.events.drain()
     }
+
+    fn shutdown(&mut self) {
+        ServoEngine::shutdown(self);
+    }
 }
 
 impl Drop for ServoEngine {
