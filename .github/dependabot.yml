@@ -26,6 +26,7 @@ updates:
       # section 3, Dependencies); bump them by hand, all together.
       - dependency-name: gpui
       - dependency-name: gpui_platform
+      - dependency-name: gpui_apple
       - dependency-name: ui
       - dependency-name: theme
       - dependency-name: component
@@ -49,6 +50,25 @@ updates:
       prefix: "ci(deps)"
     groups:
       actions-minor-patch:
+        update-types:
+          - minor
+          - patch
+
+  # Dependabot supports the `bun` ecosystem (bun.lock) natively.
+  - package-ecosystem: bun
+    directory: /site
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Madrid
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      bun-minor-patch:
         update-types:
           - minor
           - patch
