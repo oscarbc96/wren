@@ -1,0 +1,87 @@
+---
+import Download from "@lucide/astro/icons/download";
+import Package from "@lucide/astro/icons/package";
+import Laptop from "@lucide/astro/icons/laptop";
+import Wrench from "@lucide/astro/icons/wrench";
+import Layout from "@/layouts/Layout.astro";
+import SiteHeader from "@/components/SiteHeader.astro";
+import { absoluteUrl, repoUrl, siteName } from "@/lib/seo";
+import { getStars } from "@/lib/github";
+import { getUi, localePath } from "@/i18n";
+
+interface Props {
+  locale: string;
+}
+
+const { locale } = Astro.props;
+const ui = getUi(locale);
+const t = ui.downloads;
+const stars = await getStars();
+const card = "rounded-xl border border-fd-border bg-fd-card p-6";
+const link =
+  "inline-flex items-center gap-2 rounded-lg border border-fd-border bg-fd-background px-4 py-2 text-sm font-medium text-fd-foreground no-underline transition-colors hover:bg-fd-accent hover:text-fd-accent-foreground";
+---
+
+<Layout
+  title={t.title}
+  description={t.description}
+  locale={locale}
+  path="/downloads/"
+  ogKey="downloads"
+  jsonLd={[
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: siteName, item: absoluteUrl(locale, "/") },
+        { "@type": "ListItem", position: 2, name: t.heading, item: absoluteUrl(locale, "/downloads/") },
+      ],
+    },
+  ]}
+>
+  <SiteHeader locale={locale} path="/downloads/" stars={stars} section="downloads" />
+  <main>
+    <div class="mx-auto flex w-full max-w-[900px] flex-col gap-8 px-4 py-12">
+      <header>
+        <h1 class="text-3xl font-semibold tracking-tight text-fd-foreground">{t.heading}</h1>
+        <p class="mt-2 text-sm text-fd-muted-foreground">{t.lede}</p>
+      </header>
+
+      <section class={card} aria-labelledby="platform-title">
+        <div class="flex items-start gap-4">
+          <Laptop size={28} class="mt-0.5 shrink-0 text-fd-muted-foreground" aria-hidden="true" />
+          <div class="flex-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <h2 id="platform-title" class="text-lg font-semibold text-fd-foreground">{t.platformTitle}</h2>
+              <span class="rounded-md border border-fd-border bg-fd-muted px-2 py-0.5 text-xs text-fd-muted-foreground">{t.status}</span>
+            </div>
+            <p class="mt-2 text-sm leading-6 text-fd-muted-foreground">{t.platformText}</p>
+            <button
+              type="button"
+              disabled
+              aria-disabled="true"
+              class="mt-4 inline-flex cursor-not-allowed items-center gap-2 rounded-lg bg-fd-muted px-5 py-2.5 text-sm font-medium text-fd-muted-foreground"
+            >
+              <Download size={16} aria-hidden="true" />{t.soonButton}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <div class="grid gap-4 sm:grid-cols-2">
+        <section class={card} aria-labelledby="build-title">
+          <Wrench size={22} class="text-fd-muted-foreground" aria-hidden="true" />
+          <h2 id="build-title" class="mt-3 text-base font-semibold text-fd-foreground">{t.buildTitle}</h2>
+          <p class="mt-2 text-sm leading-6 text-fd-muted-foreground">{t.buildText}</p>
+          <a class={`${link} mt-4`} href={localePath(locale, "/docs/build/")}>{t.buildLink}</a>
+        </section>
+        <section class={card} aria-labelledby="releases-title">
+          <Package size={22} class="text-fd-muted-foreground" aria-hidden="true" />
+          <h2 id="releases-title" class="mt-3 text-base font-semibold text-fd-foreground">{t.releasesTitle}</h2>
+          <p class="mt-2 text-sm leading-6 text-fd-muted-foreground">{t.releasesText}</p>
+          <a class={`${link} mt-4`} href={`${repoUrl}/releases`}>{t.releasesLink}</a>
+        </section>
+      </div>
+    </div>
+  </main>
+</Layout>

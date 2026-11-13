@@ -4,7 +4,7 @@ export async function buildSite(
   env: Record<string, string>,
 ): Promise<void> {
   const proc = Bun.spawn(["bun", "run", "astro", "build", "--outDir", outDir], {
-    env: { ...process.env, GITHUB_TOKEN: "", ...env },
+    env: { ...process.env, GITHUB_TOKEN: "", WREN_PENDING_FIXTURE: "", ...env },
     stdout: "pipe",
     stderr: "pipe",
   });

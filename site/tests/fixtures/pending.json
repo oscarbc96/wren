@@ -1,0 +1,8 @@
+[
+  {
+    "number": 42,
+    "title": "chore(main): release 0.3.0",
+    "html_url": "https://github.com/example/wren-fixture/pull/42",
+    "body": ":robot: I have created a release *beep* *boop*\n---\n\n\n## [0.3.0](https://github.com/example/wren-fixture/compare/v0.2.0...v0.3.0) (2031-03-01)\n\n\n### Features\n\n* pending fixture feature ([abc1234](https://github.com/example/wren-fixture/commit/abc1234))\n\n\n### Bug Fixes\n\n* pending fixture fix ([def5678](https://github.com/example/wren-fixture/commit/def5678))\n\n---\nThis PR was generated with [Release Please](https://github.com/googleapis/release-please). See [documentation](https://github.com/googleapis/release-please#release-please)."
+  }
+]

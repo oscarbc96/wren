@@ -12,6 +12,7 @@ import {
   ViewOptionsPopover,
 } from "fumadocs-ui/layouts/docs/page";
 import { Provider, type ProviderProps } from "@/components/provider";
+import { languageSelectSlot } from "@/components/SidebarLinks";
 import { baseOptions } from "@/lib/layout.shared";
 
 export interface DocsProps extends ProviderProps {
@@ -40,7 +41,11 @@ export function Docs({
 
   return (
     <Provider {...props}>
-      <DocsLayout {...baseOptions(props.locale, props.stars)} tree={data.tree}>
+      <DocsLayout
+        {...baseOptions(props.locale, props.stars)}
+        tree={data.tree}
+        slots={{ languageSelect: languageSelectSlot }}
+      >
         <DocsPage toc={toc}>
           <DocsTitle>{title}</DocsTitle>
           <DocsDescription>{description}</DocsDescription>

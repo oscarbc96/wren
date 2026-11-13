@@ -10,7 +10,7 @@ export interface SitePage {
   ogKey: string;
   title: string;
   description: string;
-  kind: "home" | "changelog" | "docs";
+  kind: "home" | "changelog" | "downloads" | "docs";
 }
 
 /** Locale-free path of a docs page. */
@@ -43,6 +43,14 @@ export function getSitePages(): SitePage[] {
         title: ui.changelog.title,
         description: ui.changelog.description,
         kind: "changelog",
+      },
+      {
+        locale,
+        path: "/downloads/",
+        ogKey: "downloads",
+        title: ui.downloads.title,
+        description: ui.downloads.description,
+        kind: "downloads",
       },
     ];
     for (const page of source.getPages(locale)) {

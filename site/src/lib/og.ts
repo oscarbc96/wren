@@ -2,6 +2,9 @@ import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import satori from "satori";
 import sharp from "sharp";
+// Static dark variant (literal colours; satori cannot resolve CSS var()).
+// Regenerate with `mise run brand`.
+import markSvg from "../../../assets/brand/wren-icon-dark.svg?raw";
 
 /**
  * Build-time Open Graph images: satori lays out a card (own brand only, no
@@ -43,9 +46,7 @@ function el(
   return { type, props: { style, children, ...extra } };
 }
 
-const mark = `data:image/svg+xml;utf8,${encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#1f2a2e"/><ellipse cx="30" cy="34" rx="14" ry="11" fill="#e8a87c"/><circle cx="44" cy="26" r="8" fill="#e8a87c"/><path d="M50 26 L58 24 L50 28 Z" fill="#f5efe6"/><path d="M16 34 L6 28 L6 40 Z" fill="#e8a87c"/><circle cx="46" cy="24" r="1.5" fill="#1f2a2e"/></svg>',
-)}`;
+const mark = `data:image/svg+xml;utf8,${encodeURIComponent(markSvg)}`;
 
 export interface OgCard {
   locale: string;
@@ -72,16 +73,16 @@ export async function renderOgImage({
       justifyContent: "space-between",
       boxSizing: "border-box",
       padding: 72,
-      background: "#0b1114",
-      color: "#f2f6f7",
+      background: "#10172a",
+      color: "#e8edf5",
       fontFamily: "Inter",
     },
     [
       el("div", { display: "flex", alignItems: "center" }, [
-        el("img", { width: 72, height: 72, marginRight: 24 }, undefined, {
+        el("img", { width: 80, height: 80, marginRight: 24 }, undefined, {
           src: mark,
-          width: 72,
-          height: 72,
+          width: 80,
+          height: 80,
         }),
         el(
           "div",
@@ -89,7 +90,7 @@ export async function renderOgImage({
             fontSize: 56,
             fontWeight: 700,
             letterSpacing: -2,
-            color: "#2dd4d4",
+            color: "#ff7672",
           },
           "Wren",
         ),
@@ -111,7 +112,7 @@ export async function renderOgImage({
             fontSize: 30,
             lineHeight: 1.4,
             marginTop: 28,
-            color: "#9fb0b5",
+            color: "#9aa6bd",
             fontWeight: 400,
           },
           description,
@@ -119,7 +120,7 @@ export async function renderOgImage({
       ]),
       el(
         "div",
-        { display: "flex", fontSize: 22, color: "#9fb0b5", fontWeight: 400 },
+        { display: "flex", fontSize: 22, color: "#9aa6bd", fontWeight: 400 },
         "Wren",
       ),
     ],
