@@ -780,6 +780,11 @@ dependencies = [
 [[package]]
 name = "tabs"
 version = "0.0.0"
+dependencies = [
+ "engine",
+ "store",
+ "url",
+]
 
 [[package]]
 name = "tempfile"
