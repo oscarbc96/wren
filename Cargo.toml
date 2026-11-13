@@ -48,3 +48,4 @@ debug = false
 [patch.crates-io]
 zed-font-kit = { path = "vendor/zed-font-kit" }
 stylo_derive = { path = "vendor/stylo_derive" }
+gpui_ce_macos = { path = "vendor/gpui_ce_macos" }

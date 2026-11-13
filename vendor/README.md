@@ -12,3 +12,7 @@ are kept. Drop a copy once upstream ships the fix.
   which add another `From<_> for fmt::Error` impl, so rustc can no longer
   infer the error type (E0282). The patch writes
   `Ok::<(), std::fmt::Error>(())` in `to_css.rs`.
+- `gpui_ce_macos` 0.3.0: `did_finish_launching` ran the app's launch
+  callback while holding the platform mutex, so `open_window` at startup
+  deadlocked. The patch takes the callback out of the lock first, as
+  upstream main already does.
