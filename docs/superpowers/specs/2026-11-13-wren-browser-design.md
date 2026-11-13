@@ -76,9 +76,10 @@ Who it is for, in order:
 ## 5. Constraints
 
 - Language: Rust. License: **AGPL-3.0-or-later**, docs CC-BY-4.0, with a
-  CLA, the same as the template. Reason: the UI reuses Zed's GPL-3.0-or-later
-  crates (`ui`, `theme`, `component`, ...) and the template's AGPL code, so Wren
-  must be GPL-family. The CLA keeps dual licensing open for the commercial
+  CLA, the same as the template. Reason: owner's choice of an open core
+  (browser stays open, commercial services stay separate), and the template's
+  AGPL code is reused. UI is built on GPUI-CE (Apache-2.0), with Wren's own
+  components; no Zed GPL crates. The CLA keeps dual licensing open for the commercial
   layer. Full review in section 5b.
 - Repo, tooling and process copied from the template (section 5c): mise, hk, GPUI,
   `.agents/`, release-please, Astro site.
@@ -127,8 +128,7 @@ that and ship its notices in `NOTICE` and `THIRD_PARTY_LICENSES.html`
 | Servo, Stylo, WebRender, SpiderMonkey (mozjs) | MPL-2.0 | OK | MPL-2.0 files stay MPL (file-level copyleft); combining into AGPL is allowed by MPL 3.3. Our Servo patch queue is MPL and public |
 | servo-media | MPL-2.0 | OK | |
 | GStreamer core and plugins | LGPL-2.1-or-later | OK with care | Link dynamically, ship as dylibs in the bundle. Ship only `base`, `good` and the needed `bad` plugins; exclude GPL plugins (`ugly`, x264) and patent-encumbered codecs. Meet uses VP8/VP9/AV1 and Opus (royalty-free); H.264/AAC through macOS VideoToolbox/AudioToolbox, whose patents Apple covers |
-| GPUI family (`gpui`, `gpui_platform`, `util`, `collections`, `sum_tree`) | Apache-2.0 | OK | Apache-2.0 is GPLv3-compatible |
-| Zed `ui`, `component`, `menu`, `icons`, `ui_input`, `theme`, `fuzzy` | GPL-3.0-or-later | OK | The reason Wren is GPL-family. Keep headers, list in NOTICE |
+| GPUI-CE (`gpui-ce`, `gpui_ce_platform`, `gpui_ce_elements`, crates.io 0.3.0) | Apache-2.0 | OK | Community fork of Zed's GPUI; Apache-2.0 is GPLv3/AGPL-compatible. Zed's GPL `ui`/`theme` crates are not used |
 | Template code (settings, themes, mcp, plugin host, scripts, site) | AGPL-3.0-or-later | OK | Same owner; copied with headers |
 | Obscura (crates, reader, `obscura-cdp`) | Apache-2.0 | OK | Vendored `cosmic-text`, `taffy` are MIT/Apache; `wreq-util` to verify. V8 is BSD-3-Clause, OK |
 | Obscura stealth build (wreq + BoringSSL) | BoringSSL: ISC plus legacy OpenSSL license | **Avoid** | The legacy OpenSSL license is GPL-incompatible. Use Obscura's rustls build; Wren needs no fingerprint spoofing |
@@ -141,7 +141,7 @@ that and ship its notices in `NOTICE` and `THIRD_PARTY_LICENSES.html`
 | Fonts and icons | OFL / open licenses only | OK | As in the template |
 
 Not code licenses, still to respect:
-- **Trademarks**: never use "Chrome", "Google", "Servo" or Zed marks in
+- **Trademarks**: never use "Chrome", "Google", "Servo", "Zed" or "GPUI" marks in
   the product name or logo. "Open in Chrome" and "works with Chrome
   extensions" are descriptive use only.
 - **Name "Wren"**: a programming language (MIT) shares it; run a
@@ -177,7 +177,11 @@ env prefix and URI scheme to `wren`, `WREN_*`, `wren://`:
 - Conventions: unprefixed snake_case crates, binary crate `wren`,
   Conventional Commits, self-merged squash PRs, local green is the gate,
   signed commits.
-- Zed and GPUI pinned to the same Zed git rev as the template, bumped together.
+- UI framework: **GPUI-CE** from crates.io (`gpui-ce`, `gpui_ce_platform`,
+  `gpui_ce_elements`, pinned exactly), not Zed's GPUI. Template code that
+  wraps Zed's GPL `ui`/`theme` crates is not copied; Wren writes its own
+  `themes` (reading Zed-style theme JSON, implemented from scratch) and
+  `components`.
 
 ## 6. Approaches considered
 
@@ -204,7 +208,7 @@ plus a per-site compat list that remembers it.
 |  +------------------+   +----------------------------------+ |
 |  | GPUI chrome      |   | internal pages (wren://)         | |
 |  | tabs, omnibox,   |   | settings, history, extensions,   | |
-|  | sidebar (Zed ui) |   | AI sidebar, generated pages      | |
+|  | sidebar (GPUI-CE) |   | AI sidebar, generated pages      | |
 |  +------------------+   +----------------------------------+ |
 |  tabs: tab lifecycle, sleep/freeze, memory budget             |
 |  engine: Servo embedding (WebView per tab, child NSView)      |
@@ -230,8 +234,8 @@ may merge small crates.
 ### 7.1 Shell and UI
 
 - Browser UI (toolbar, tab strip, omnibox, sidebar, menus, command
-  palette) in **GPUI with Zed's `ui` crates**, as in the template. Settings,
-  themes (Zed theme JSON) and keymaps reuse the template's crates.
+  palette) in **GPUI-CE** with Wren's own `components`. Settings and
+  keymap loading reuse the template's crates; `themes` is Wren's own.
 - Each tab's Servo WebView renders into a **child NSView** inside the GPUI
   window, the same pattern the template uses for its `wry` child webview. Servo
   gets the view through `raw-window-handle`; GPUI owns the event loop and
@@ -540,8 +544,8 @@ without the model; routines including detected ones with payment
 confirmation.
 
 Approved by the owner 2026-11-13, with: copy everything possible from
-the template (mise, hk, GPUI and Zed crates, process); review all licenses
-(section 5b). AGPL-3.0-or-later follows from reusing Zed GPL crates and
+the template (mise, hk, process); review all licenses (section 5b). UI on
+GPUI-CE (owner, 2026-11-13). AGPL-3.0-or-later is the owner's open-core choice and
 the template code.
 
 Proposed by Claude (the owner may override): name "Wren";
