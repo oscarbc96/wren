@@ -33,6 +33,7 @@ const pageTree = await source.serializePageTree(source.getPageTree(locale));
   path={path}
   ogKey={docsOgKey(page.slugs)}
   ogType="article"
+  footer={false}
   jsonLd={[
     {
       "@context": "https://schema.org",

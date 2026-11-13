@@ -44,8 +44,12 @@ description = "Run timing-sensitive tests (best on an idle machine)"
 run = "cargo nextest run --workspace --run-ignored ignored-only"
 
 [tasks."test:repo"]
-description = "Test repo tooling scripts (Bun): PR body check"
+description = "Test repo tooling scripts (Bun): PR body check, brand icons"
 run = "bun test tests/repo"
+
+[tasks.brand]
+description = "Regenerate static brand icons from assets/brand/wren-icon.svg"
+run = "bun scripts/brand.ts"
 
 [tasks."lint:pr-body"]
 description = "Check a PR body against the template: lint:pr-body -- --body-file <file> --title <title> [--base <sha>]"

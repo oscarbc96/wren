@@ -1,10 +1,18 @@
 ---
+import Airplay from "@lucide/astro/icons/airplay";
+import ChevronDown from "@lucide/astro/icons/chevron-down";
+import Languages from "@lucide/astro/icons/languages";
+import Moon from "@lucide/astro/icons/moon";
+import Star from "@lucide/astro/icons/star";
+import Sun from "@lucide/astro/icons/sun";
 import { getUi, locales, localePath } from "@/i18n";
 import { repoUrl } from "@/lib/seo";
+import { navBirdSvg } from "@/lib/nav-bird.generated";
 
 /**
- * Static site header: no JavaScript. Used by every page that has no React
- * island (landing, changelog, 404). The docs keep the Fumadocs layout.
+ * Static site header: no framework JavaScript. Used by every page that has no
+ * React island (landing, changelog, 404). The docs keep the Fumadocs layout;
+ * the theme switch and language picker mirror its markup so both look alike.
  */
 interface Props {
   locale: string;
@@ -12,19 +20,22 @@ interface Props {
   path: string;
   stars?: string;
   /** Current section, for `aria-current`. */
-  section?: "home" | "docs" | "changelog";
+  section?: "home" | "docs" | "downloads" | "changelog";
 }
 
 const { locale, path, stars, section } = Astro.props;
 const ui = getUi(locale);
 const tr = ui.translations;
+// Same order and icons as Fumadocs' theme switch.
 const modes = [
-  ["light", tr["Light(theme switcher)(aria-label)"] ?? "Light", "☀"],
-  ["dark", tr["Dark(theme switcher)(aria-label)"] ?? "Dark", "☾"],
-  ["system", tr["System(theme switcher)(aria-label)"] ?? "System", "◐"],
+  ["light", tr["Light(theme switcher)(aria-label)"] ?? "Light", Sun],
+  ["dark", tr["Dark(theme switcher)(aria-label)"] ?? "Dark", Moon],
+  ["system", tr["System(theme switcher)(aria-label)"] ?? "System", Airplay],
 ] as const;
+const chooseLanguage = tr["Choose a language(language switcher)"] ?? "Choose a language";
+const currentLanguage = locales.find((item) => item.code === locale)?.name ?? locale;
 // Same store as the docs theme switch (next-themes keeps `theme` in localStorage).
-const themeScript = `var b=document.querySelectorAll("[data-theme-set]");function s(v){for(var i=0;i<b.length;i++)b[i].setAttribute("aria-pressed",String(b[i].dataset.themeSet===v))}var c="system";try{c=localStorage.getItem("theme")||"system"}catch(e){}s(c);for(var i=0;i<b.length;i++)b[i].addEventListener("click",function(){var v=this.dataset.themeSet;try{localStorage.setItem("theme",v)}catch(e){}document.documentElement.classList.toggle("dark",v==="dark"||(v==="system"&&matchMedia("(prefers-color-scheme: dark)").matches));s(v)})`;
+const themeScript = `var b=document.querySelectorAll("[data-theme-set]");function s(v){for(var i=0;i<b.length;i++)b[i].setAttribute("aria-pressed",String(b[i].dataset.themeSet===v))}var c="system";try{c=localStorage.getItem("theme")||"system"}catch(e){}s(c);for(var i=0;i<b.length;i++)b[i].addEventListener("click",function(){var v=this.dataset.themeSet;try{localStorage.setItem("theme",v)}catch(e){}document.documentElement.classList.toggle("dark",v==="dark"||(v==="system"&&matchMedia("(prefers-color-scheme: dark)").matches));s(v)});var d=document.querySelector("[data-lang-menu]");if(d){document.addEventListener("click",function(e){if(!d.contains(e.target))d.removeAttribute("open")});d.addEventListener("keydown",function(e){if(e.key==="Escape"){d.removeAttribute("open");d.querySelector("summary").focus()}})}`;
 const link =
   "rounded-md px-3 py-2 text-sm text-fd-muted-foreground no-underline transition-colors hover:text-fd-foreground";
 ---
@@ -32,32 +43,49 @@ const link =
 <header class="border-b border-fd-border bg-fd-background">
   <div class="mx-auto flex max-w-5xl flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2 sm:px-6">
     <a
-      class="wren-wordmark mr-4 py-2 text-lg text-fd-foreground no-underline"
+      class="mr-4 inline-flex items-center py-1 no-underline"
       href={localePath(locale, "/")}
-      aria-label="Wren">Wren</a
+      aria-label="Wren"
+      ><span class="wren-nav-bird" set:html={navBirdSvg} /></a
     >
     <nav class="flex flex-wrap items-center" aria-label={ui.nav.main}>
       <a class={link} href={localePath(locale, "/docs/")} aria-current={section === "docs" ? "page" : undefined}>{ui.nav.docs}</a>
+      <a class={link} href={localePath(locale, "/downloads/")} aria-current={section === "downloads" ? "page" : undefined}>{ui.nav.download}</a>
       <a class={link} href={localePath(locale, "/changelog/")} aria-current={section === "changelog" ? "page" : undefined}>{ui.nav.changelog}</a>
-      <a class={link} href={repoUrl}>{ui.nav.github}{stars && <span class="ml-1 text-xs" aria-label={ui.starsLabel.replace("{count}", stars)}>★ {stars}</span>}</a>
+      <a class={`${link} inline-flex items-center`} href={repoUrl}>{ui.nav.github}{stars && <span class="ml-2 inline-flex items-center gap-1 text-xs" aria-label={ui.starsLabel.replace("{count}", stars)}><Star size={16} fill="currentColor" aria-hidden="true" />{stars}</span>}</a>
     </nav>
-    <nav class="ml-auto flex flex-wrap items-center" aria-label={ui.language}>
+    <details class="group relative ml-auto" data-lang-menu>
+      <summary
+        class="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-md p-1.5 text-sm font-medium text-fd-muted-foreground transition-colors duration-100 hover:bg-fd-accent hover:text-fd-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fd-ring group-open:bg-fd-accent [&::-webkit-details-marker]:hidden"
+        aria-label={ui.language}
+      >
+        <Languages size={16} aria-hidden="true" />
+        {currentLanguage}
+        <ChevronDown size={16} aria-hidden="true" />
+      </summary>
+      <div class="absolute end-0 z-50 mt-2 flex min-w-40 flex-col gap-0.5 rounded-xl border border-fd-border bg-fd-popover p-1 text-fd-popover-foreground shadow-lg">
+        <p class="p-2 text-xs font-medium text-fd-muted-foreground">{chooseLanguage}</p>
+        {
+          locales.map((item) => (
+            <a
+              class={
+                item.code === locale
+                  ? "rounded-lg bg-fd-accent px-2 py-1.5 text-start text-sm font-medium text-fd-accent-foreground no-underline"
+                  : "rounded-lg px-2 py-1.5 text-start text-sm text-fd-muted-foreground no-underline transition-colors hover:bg-fd-accent hover:text-fd-accent-foreground"
+              }
+              href={localePath(item.code, path)}
+              lang={item.code}
+              hreflang={item.code}
+              aria-current={item.code === locale ? "true" : undefined}>{item.name}</a
+            >
+          ))
+        }
+      </div>
+    </details>
+    <div class="inline-flex items-center overflow-hidden rounded-full border border-fd-border p-1 *:rounded-full" role="group" aria-label={tr["Toggle Theme(theme switcher)(aria-label)"] ?? "Toggle theme"}>
       {
-        locales.map((item) => (
-          <a
-            class={link}
-            href={localePath(item.code, path)}
-            lang={item.code}
-            hreflang={item.code}
-            aria-current={item.code === locale ? "true" : undefined}>{item.name}</a
-          >
-        ))
-      }
-    </nav>
-    <div class="flex items-center rounded-full border border-fd-border p-0.5" role="group" aria-label={tr["Toggle Theme(theme switcher)(aria-label)"] ?? "Toggle theme"}>
-      {
-        modes.map(([mode, label, icon]) => (
-          <button type="button" class="size-8 rounded-full text-sm text-fd-muted-foreground aria-pressed:bg-fd-muted aria-pressed:text-fd-foreground" data-theme-set={mode} aria-label={label} aria-pressed="false">{icon}</button>
+        modes.map(([mode, label, Icon]) => (
+          <button type="button" class="size-6.5 p-1.5 text-fd-muted-foreground aria-pressed:bg-fd-accent aria-pressed:text-fd-accent-foreground" data-theme-set={mode} aria-label={label} aria-pressed="false"><Icon fill="currentColor" class="size-full" aria-hidden="true" /></button>
         ))
       }
     </div>
