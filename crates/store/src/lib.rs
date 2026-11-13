@@ -62,8 +62,7 @@ pub trait Store {
     fn load_session(&self) -> Result<Option<SessionSnapshot>>;
 }
 
-pub(crate) fn score(count: i64, last_visit: jiff::Timestamp) -> f64 {
-    let now = jiff::Timestamp::now();
+pub(crate) fn score_at(count: i64, last_visit: jiff::Timestamp, now: jiff::Timestamp) -> f64 {
     let age_days = age_days(last_visit, now);
     let decay = 2.0_f64.powf(-age_days / 30.0);
     count as f64 * decay

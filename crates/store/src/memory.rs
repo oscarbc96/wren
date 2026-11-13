@@ -1,12 +1,15 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use crate::{Bookmark, Error, HistoryHit, Result, SessionSnapshot, Store, score as score_fn};
+use crate::{Bookmark, Error, HistoryHit, Result, SessionSnapshot, Store};
 // score is crate::score (function). rename to avoid conflict.
 
 #[derive(Default)]
 struct Visit {
+    url: String,
+    url_lc: String,
     title: String,
+    title_lc: String,
     count: i64,
     last_visit: jiff::Timestamp,
 }
@@ -20,7 +23,8 @@ struct BookmarkRow {
 
 #[derive(Default)]
 struct Inner {
-    visits: HashMap<String, Visit>,
+    index: HashMap<String, usize>,
+    visits: Vec<Visit>,
     bookmarks: Vec<BookmarkRow>,
     session: Option<SessionSnapshot>,
     fail_next: bool,
@@ -49,28 +53,48 @@ impl Store for MemoryStore {
     fn record_visit(&self, url: &url::Url, title: &str, at: jiff::Timestamp) -> Result<()> {
         let mut g = self.inner.lock().unwrap();
         let key = url.as_str().to_string();
-        let v = g.visits.entry(key).or_insert(Visit {
-            title: title.to_string(),
-            count: 0,
-            last_visit: at,
-        });
-        v.count += 1;
-        if !title.is_empty() {
-            v.title = title.to_string();
+        if let Some(&idx) = g.index.get(&key) {
+            let v = &mut g.visits[idx];
+            v.count += 1;
+            if !title.is_empty() {
+                v.title = title.to_string();
+                v.title_lc = title.to_lowercase();
+            }
+            v.last_visit = at;
+        } else {
+            let idx = g.visits.len();
+            g.visits.push(Visit {
+                url: key.clone(),
+                url_lc: key.to_lowercase(),
+                title: title.to_string(),
+                title_lc: title.to_lowercase(),
+                count: 1,
+                last_visit: at,
+            });
+            g.index.insert(key, idx);
         }
-        v.last_visit = at;
         Ok(())
     }
 
     fn set_title(&self, url: &url::Url, title: &str) -> Result<()> {
         let mut g = self.inner.lock().unwrap();
         let key = url.as_str().to_string();
-        let v = g.visits.entry(key).or_insert(Visit {
-            title: title.to_string(),
-            count: 0,
-            last_visit: jiff::Timestamp::now(),
-        });
-        v.title = title.to_string();
+        if let Some(&idx) = g.index.get(&key) {
+            let v = &mut g.visits[idx];
+            v.title = title.to_string();
+            v.title_lc = title.to_lowercase();
+        } else {
+            let idx = g.visits.len();
+            g.visits.push(Visit {
+                url: key.clone(),
+                url_lc: key.to_lowercase(),
+                title: title.to_string(),
+                title_lc: title.to_lowercase(),
+                count: 0,
+                last_visit: jiff::Timestamp::now(),
+            });
+            g.index.insert(key, idx);
+        }
         Ok(())
     }
 
@@ -78,30 +102,58 @@ impl Store for MemoryStore {
         let g = self.inner.lock().unwrap();
         let q = q.trim();
         let terms: Vec<String> = q.split_whitespace().map(|t| t.to_lowercase()).collect();
-        let mut hits: Vec<HistoryHit> = g
-            .visits
-            .iter()
-            .filter(|(url, v)| {
-                if terms.is_empty() {
-                    true
-                } else {
-                    terms.iter().all(|t| {
-                        v.title.to_lowercase().contains(t) || url.to_lowercase().contains(t)
-                    })
+        let now = jiff::Timestamp::now();
+        // Single pass, keep only top `limit` by score; no large allocation.
+        let mut best: Vec<(f64, usize)> = Vec::with_capacity(limit);
+        let mut min_pos = 0usize;
+        let mut have_min = false;
+        for (i, v) in g.visits.iter().enumerate() {
+            if !terms.is_empty() {
+                let mut ok = true;
+                for t in &terms {
+                    if !(v.title_lc.contains(t) || v.url_lc.contains(t)) {
+                        ok = false;
+                        break;
+                    }
+                }
+                if !ok {
+                    continue;
+                }
+            }
+            let s = crate::score_at(v.count, v.last_visit, now);
+            if best.len() < limit {
+                best.push((s, i));
+                if best.len() == limit {
+                    min_pos = 0;
+                    for (pos, (sc, _)) in best.iter().enumerate() {
+                        if *sc < best[min_pos].0 {
+                            min_pos = pos;
+                        }
+                    }
+                    have_min = true;
+                }
+            } else if have_min && s > best[min_pos].0 {
+                best[min_pos] = (s, i);
+                min_pos = 0;
+                for (pos, (sc, _)) in best.iter().enumerate() {
+                    if *sc < best[min_pos].0 {
+                        min_pos = pos;
+                    }
+                }
+            }
+        }
+        best.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        let hits: Vec<HistoryHit> = best
+            .into_iter()
+            .map(|(score, i)| {
+                let v = &g.visits[i];
+                HistoryHit {
+                    url: url::Url::parse(&v.url).unwrap(),
+                    title: v.title.clone(),
+                    score,
                 }
             })
-            .map(|(url, v)| HistoryHit {
-                url: url::Url::parse(url).unwrap(),
-                title: v.title.clone(),
-                score: score_fn(v.count, v.last_visit),
-            })
             .collect();
-        hits.sort_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        hits.truncate(limit);
         Ok(hits)
     }
 

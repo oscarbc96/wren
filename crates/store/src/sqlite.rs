@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use rusqlite::{Connection, params};
 
 use crate::{
-    Bookmark, Error, HistoryHit, Result, SessionSnapshot, Store, micros_to_ts, score as score_fn,
+    Bookmark, Error, HistoryHit, Result, SessionSnapshot, Store, micros_to_ts, score_at,
     ts_to_micros,
 };
 
@@ -119,20 +119,35 @@ impl Store for SqliteStore {
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?
         };
+        let now = jiff::Timestamp::now();
         let mut hits: Vec<HistoryHit> = rows
             .into_iter()
             .map(|(url, title, count, last_visit)| HistoryHit {
                 url: url::Url::parse(&url).unwrap(),
                 title,
-                score: score_fn(count, micros_to_ts(last_visit)),
+                score: score_at(count, micros_to_ts(last_visit), now),
             })
             .collect();
-        hits.sort_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        hits.truncate(limit);
+        if hits.len() > limit {
+            hits.select_nth_unstable_by(limit, |a, b| {
+                b.score
+                    .partial_cmp(&a.score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            hits.truncate(limit);
+            hits.sort_by(|a, b| {
+                b.score
+                    .partial_cmp(&a.score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+        } else {
+            hits.sort_by(|a, b| {
+                b.score
+                    .partial_cmp(&a.score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            hits.truncate(limit);
+        }
         Ok(hits)
     }
 
