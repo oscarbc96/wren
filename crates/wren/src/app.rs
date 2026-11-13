@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use gpui::{App, AppContext, WindowOptions};
+use gpui::{App, AppContext, KeyBinding, WindowOptions};
 use gpui_platform::application;
 use raw_window_handle::HasWindowHandle;
 use settings::{ConfigPaths, SettingsStore};
@@ -22,6 +22,9 @@ pub fn run_with_args(args: Args) {
     let (config_dir, data_dir) = resolve_dirs(&args);
     let paths = ConfigPaths::at(config_dir.clone());
     let _ = paths.ensure_exists();
+    // Do not create template leftovers in the profile dir.
+    let _ = std::fs::remove_dir_all(paths.root.join("plugins"));
+    let _ = std::fs::remove_dir_all(paths.root.join("workspaces"));
 
     let store_path = data_dir.join("wren.sqlite");
     let store = Arc::new(SqliteStore::open(&store_path).expect("open store"));
@@ -58,24 +61,33 @@ pub fn run_with_args(args: Args) {
                 let waker: Arc<dyn Fn() + Send + Sync> = Arc::new(|| {});
                 let engine = engine::ServoEngine::new(raw_wh, waker).expect("servo engine");
                 cx.new(|cx| {
-                    let mut bw = BrowserWindow::new(
-                        engine,
-                        store_for_win.clone(),
-                        settings_for_win.clone(),
-                        cx,
-                    );
-                    if !urls_for_win.is_empty() {
-                        if let Some(first) = urls_for_win.first() {
-                            bw.open_url(first.clone());
-                        }
-                        for u in urls_for_win.iter().skip(1) {
-                            bw.strip.open(&mut bw.engine, u, false);
-                        }
+                    if urls_for_win.is_empty() {
+                        BrowserWindow::new(
+                            engine,
+                            store_for_win.clone(),
+                            settings_for_win.clone(),
+                            cx,
+                        )
+                    } else {
+                        BrowserWindow::with_urls(
+                            engine,
+                            store_for_win.clone(),
+                            settings_for_win.clone(),
+                            urls_for_win.clone(),
+                            cx,
+                        )
                     }
-                    bw
                 })
             })
             .expect("open window");
+
+        let quit_handle = handle;
+        cx.on_action(move |_: &actions::Quit, cx| {
+            let _ = quit_handle.update(cx, |view, _window, _cx| {
+                view.shutdown();
+            });
+            cx.quit();
+        });
 
         cx.spawn(async move |cx| {
             loop {
@@ -119,8 +131,27 @@ fn resolve_dirs(args: &Args) -> (PathBuf, PathBuf) {
     }
 }
 
-fn register_actions(_cx: &mut App) {
-    // Actions are registered via keymap bindings and listeners on views.
-    // GPUI-ce binds actions through keymaps; ensure action types are linked.
-    let _ = std::any::TypeId::of::<actions::New>();
+fn register_actions(cx: &mut App) {
+    cx.bind_keys([
+        KeyBinding::new("cmd-t", actions::New, None),
+        KeyBinding::new("cmd-w", actions::Close, None),
+        KeyBinding::new("cmd-shift-t", actions::Reopen, None),
+        KeyBinding::new("cmd-l", actions::Focus, None),
+        KeyBinding::new("cmd-r", actions::Reload, None),
+        KeyBinding::new("cmd-[", actions::Back, None),
+        KeyBinding::new("cmd-]", actions::Forward, None),
+        KeyBinding::new("cmd-d", actions::Toggle, None),
+        KeyBinding::new("cmd-1", actions::Select1, None),
+        KeyBinding::new("cmd-2", actions::Select2, None),
+        KeyBinding::new("cmd-3", actions::Select3, None),
+        KeyBinding::new("cmd-4", actions::Select4, None),
+        KeyBinding::new("cmd-5", actions::Select5, None),
+        KeyBinding::new("cmd-6", actions::Select6, None),
+        KeyBinding::new("cmd-7", actions::Select7, None),
+        KeyBinding::new("cmd-8", actions::Select8, None),
+        KeyBinding::new("cmd-9", actions::Select9, None),
+        KeyBinding::new("cmd-shift-[", actions::Prev, None),
+        KeyBinding::new("cmd-shift-]", actions::Next, None),
+        KeyBinding::new("cmd-q", actions::Quit, None),
+    ]);
 }

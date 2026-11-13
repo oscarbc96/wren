@@ -25,6 +25,20 @@ fn setup_window(
     cx.add_window_view(|_window, cx| BrowserWindow::new(engine, store, settings, cx))
 }
 
+fn setup_window_with_urls(
+    cx: &mut TestAppContext,
+    engine: FakeEngine,
+    store: Arc<MemoryStore>,
+    settings: Settings,
+    urls: Vec<Url>,
+) -> (
+    gpui::Entity<BrowserWindow<FakeEngine, MemoryStore>>,
+    &mut VisualTestContext,
+) {
+    cx.update(themes::init);
+    cx.add_window_view(|_window, cx| BrowserWindow::with_urls(engine, store, settings, urls, cx))
+}
+
 #[gpui::test]
 fn new_tab_focuses_omnibox(cx: &mut TestAppContext) {
     let store = Arc::new(MemoryStore::default());
@@ -216,6 +230,120 @@ fn startup_restores_session(cx: &mut TestAppContext) {
         view.update(cx, |w, _| {
             assert_eq!(w.strip.tabs().len(), 2);
             assert_eq!(w.strip.active(), w.strip.tabs().get(1).map(|t| t.id));
+        });
+    });
+}
+
+#[gpui::test]
+fn cli_urls_open_tabs(cx: &mut TestAppContext) {
+    let store = Arc::new(MemoryStore::default());
+    let engine = FakeEngine::new();
+    let urls = vec![
+        Url::parse("https://first.test/").unwrap(),
+        Url::parse("https://second.test/").unwrap(),
+    ];
+    let (view, cxw) = setup_window_with_urls(cx, engine, store, test_settings(), urls);
+    cxw.update(|_window, cx| {
+        view.update(cx, |w, _| {
+            assert_eq!(w.strip.tabs().len(), 2);
+            assert_eq!(w.strip.active(), w.strip.tabs().first().map(|t| t.id));
+            let creates: Vec<_> = w
+                .engine
+                .calls()
+                .iter()
+                .filter_map(|c| match c {
+                    engine::fake::FakeCall::Create { url } => Some(url.clone()),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(creates.len(), 2);
+            assert_eq!(creates[0].as_str(), "https://first.test/");
+            assert_eq!(creates[1].as_str(), "https://second.test/");
+        });
+    });
+}
+
+#[gpui::test]
+fn blank_pages_not_recorded(cx: &mut TestAppContext) {
+    let store = Arc::new(MemoryStore::default());
+    let engine = FakeEngine::new();
+    let (view, cxw) = setup_window(cx, engine, store.clone(), test_settings());
+    let webview = cxw.update(|_window, cx| view.update(cx, |w, _| w.strip.tabs()[0].webview));
+    let url = Url::parse("about:blank").unwrap();
+    cxw.update(|_window, cx| {
+        view.update(cx, |w, _| {
+            w.engine.push(EngineEvent::UrlChanged {
+                id: webview,
+                url: url.clone(),
+            });
+            w.engine.push(EngineEvent::TitleChanged {
+                id: webview,
+                title: "Blank".into(),
+            });
+            w.engine.push(EngineEvent::Load {
+                id: webview,
+                state: LoadState::Complete,
+            });
+        });
+    });
+    cxw.update(|window, cx| {
+        view.update(cx, |w, cx| {
+            w.tick(window, cx);
+        });
+    });
+    let hits = store.search_history("about", 10).unwrap();
+    assert!(hits.is_empty(), "about:blank must not be recorded");
+}
+
+#[gpui::test]
+fn actions_dispatch(cx: &mut TestAppContext) {
+    let store = Arc::new(MemoryStore::default());
+    let engine = FakeEngine::new();
+    let (view, cxw) = setup_window(cx, engine, store, test_settings());
+    cxw.update(|window, cx| {
+        view.update(cx, |w, _| {
+            w.new_tab(false);
+        });
+        window.dispatch_action(Box::new(wren::actions::Next), cx);
+        window.dispatch_action(Box::new(wren::actions::Close), cx);
+        window.dispatch_action(Box::new(wren::actions::New), cx);
+        assert!(!view.read(cx).strip.tabs().is_empty());
+    });
+}
+
+#[gpui::test]
+fn content_forwards_input(cx: &mut TestAppContext) {
+    let store = Arc::new(MemoryStore::default());
+    let engine = FakeEngine::new();
+    let (view, cxw) = setup_window(cx, engine, store, test_settings());
+    cxw.update(|window, cx| {
+        view.update(cx, |w, cx| {
+            w.tick(window, cx);
+        });
+    });
+    cxw.simulate_mouse_down(
+        gpui::Point::new(gpui::px(50.), gpui::px(120.)),
+        gpui::MouseButton::Left,
+        gpui::Modifiers::default(),
+    );
+    cxw.simulate_mouse_up(
+        gpui::Point::new(gpui::px(50.), gpui::px(120.)),
+        gpui::MouseButton::Left,
+        gpui::Modifiers::default(),
+    );
+    cxw.update(|_window, cx| {
+        view.update(cx, |w, _| {
+            let has_input = w.engine.calls().iter().any(|c| {
+                matches!(
+                    c,
+                    engine::fake::FakeCall::Input(_, engine::EngineInput::MouseDown { .. })
+                )
+            });
+            assert!(
+                has_input,
+                "expected mouse down forwarded, got {:?}",
+                w.engine.calls()
+            );
         });
     });
 }
