@@ -1,0 +1,90 @@
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  // Single-package site: turbo runs the package scripts of this directory only
+  // (no Bun workspaces). Local filesystem cache only; no remote cache.
+  "cacheDir": ".turbo/cache",
+  // Local cache cap: entries older than 14 days or beyond 500 MB (oldest
+  // first) are evicted at the start of each run.
+  "cacheMaxAge": "14d",
+  "cacheMaxSize": "500MB",
+  "envMode": "strict",
+  "noUpdateNotifier": true,
+  "tasks": {
+    "build": {
+      "inputs": [
+        "src/**",
+        "content/**",
+        "public/**",
+        "astro.config.mjs",
+        "tsconfig.json",
+        "package.json",
+        "bun.lock"
+      ],
+      "outputs": ["dist/**"],
+      // Fixtures change the output, so they are part of the hash. GITHUB_TOKEN
+      // is passed through but not hashed: releases and stars are fetched at
+      // build time, so a build that uses the token (Pages) must run with
+      // --force; the keyed value would otherwise change on every run.
+      "env": ["WREN_CHANGELOG_FIXTURE", "WREN_STARS_FIXTURE"],
+      "passThroughEnv": ["GITHUB_TOKEN"]
+    },
+    "test": {
+      "dependsOn": ["build"],
+      "inputs": [
+        "src/**",
+        "content/**",
+        "public/**",
+        "tests/**",
+        "../.github/dependabot.yml",
+        "astro.config.mjs",
+        "tsconfig.json",
+        "package.json",
+        "bun.lock"
+      ],
+      "outputs": ["dist-tests/**"],
+      "env": ["WREN_CHANGELOG_FIXTURE", "WREN_STARS_FIXTURE"],
+      "passThroughEnv": ["GITHUB_TOKEN"]
+    },
+    "lint": {
+      "inputs": [
+        "src/**",
+        "content/**",
+        "scripts/**",
+        "tests/**",
+        "astro.config.mjs",
+        "tsconfig.json",
+        "package.json",
+        "bun.lock"
+      ],
+      "outputs": []
+    },
+    "check": {
+      "dependsOn": ["build"],
+      "inputs": [
+        "src/**",
+        "content/**",
+        "scripts/**",
+        "tests/**",
+        "astro.config.mjs",
+        "linkinator.config.json",
+        "tsconfig.json",
+        "package.json",
+        "bun.lock"
+      ],
+      "outputs": []
+    },
+    // Lighthouse timings vary per run: never cache. Needs the built dist/.
+    "lighthouse": {
+      "dependsOn": ["build"],
+      "cache": false,
+      "passThroughEnv": ["CHROME_PATH", "CI"]
+    },
+    // Reads git history and the PR body, which are not task inputs: never cache.
+    "check-translations": {
+      "cache": false,
+      "passThroughEnv": ["BASE_SHA", "PR_BODY", "TRANSLATIONS_UNCHANGED"]
+    },
+    "format": { "cache": false },
+    "dev": { "cache": false, "persistent": true }
+  }
+}

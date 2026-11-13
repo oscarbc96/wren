@@ -1,0 +1,7 @@
+{
+  "recurse": true,
+  "checkFragments": true,
+  "silent": true,
+  "serverRoot": ".linkinator",
+  "skip": ["^https?://(?!localhost|127\\.0\\.0\\.1)"]
+}

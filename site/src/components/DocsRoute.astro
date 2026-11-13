@@ -1,0 +1,76 @@
+---
+import Layout from "@/layouts/Layout.astro";
+import { Docs } from "@/components/docs";
+import { getStars } from "@/lib/github";
+import { getPageMarkdownUrl, source } from "@/lib/source";
+import { docsOgKey, docsPath } from "@/lib/pages";
+import { absoluteUrl, ogImageUrl, repoUrl, siteName } from "@/lib/seo";
+import { getUi } from "@/i18n";
+
+interface Props {
+  locale: string;
+  page: ReturnType<typeof source.getPages>[number];
+}
+
+const { locale, page } = Astro.props;
+const { body: Content, toc } = await page.data.load();
+const stars = await getStars();
+const ui = getUi(locale);
+const path = docsPath(page.slugs);
+const url = absoluteUrl(locale, path);
+const crumbs = [
+  { name: siteName, item: absoluteUrl(locale, "/") },
+  { name: ui.docsTitle, item: absoluteUrl(locale, "/docs/") },
+  ...(page.slugs.length > 0 ? [{ name: page.data.title, item: url }] : []),
+];
+const pageTree = await source.serializePageTree(source.getPageTree(locale));
+---
+
+<Layout
+  title={`${page.data.title} | Wren`}
+  description={page.data.description ?? ""}
+  locale={locale}
+  path={path}
+  ogKey={docsOgKey(page.slugs)}
+  ogType="article"
+  jsonLd={[
+    {
+      "@context": "https://schema.org",
+      "@type": "TechArticle",
+      headline: page.data.title,
+      description: page.data.description,
+      inLanguage: locale,
+      url,
+      mainEntityOfPage: url,
+      image: ogImageUrl(locale, docsOgKey(page.slugs)),
+      isPartOf: { "@type": "WebSite", name: siteName, url: absoluteUrl(locale, "/") },
+      publisher: { "@type": "Organization", name: siteName, url: repoUrl },
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: crumbs.map((crumb, i) => ({
+        "@type": "ListItem",
+        position: i + 1,
+        name: crumb.name,
+        item: crumb.item,
+      })),
+    },
+  ]}
+>
+  <Docs
+    client:idle
+    pathname={Astro.url.pathname}
+    params={Astro.params}
+    locale={locale}
+    stars={stars}
+    tree={pageTree}
+    title={page.data.title}
+    description={page.data.description}
+    toc={toc}
+    markdownUrl={getPageMarkdownUrl(page)}
+    githubUrl={`https://github.com/oscarbc96/wren/blob/main/site/content/docs/${encodeURI(page.path)}`}
+  >
+    <Content />
+  </Docs>
+</Layout>

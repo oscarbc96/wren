@@ -1,0 +1,19 @@
+---
+import type { GetStaticPaths } from "astro";
+import DocsRoute from "@/components/DocsRoute.astro";
+import { defaultLocale } from "@/i18n";
+import { source } from "@/lib/source";
+
+export const prerender = true;
+
+export const getStaticPaths = (() => {
+  return source.getPages(defaultLocale).map((page) => ({
+    params: { slug: decodeURI(page.slugs.join("/")) || undefined },
+    props: { page },
+  }));
+}) satisfies GetStaticPaths;
+
+const { page } = Astro.props;
+---
+
+<DocsRoute locale={defaultLocale} page={page} />

@@ -1,0 +1,42 @@
+---
+title: Introduction
+description: What Wren is, who it is for and where it stands today.
+---
+
+Wren is an open-source desktop browser. It is written in Rust on the
+[Servo](https://servo.org) engine. It aims to use half the memory of Chrome,
+run Chrome extensions and bring an AI agent you control.
+
+**Status: pre-alpha, in design.** Nothing to download yet. The first milestone
+(M0) has not shipped.
+
+## Why Wren
+
+Chrome is the default browser for most people and it is heavy. Every serious
+alternative is either Chromium underneath or not yet usable day to day. Wren
+is a product shell around the Servo engine, with the features people need to
+leave Chrome and an AI layer designed in, not bolted on.
+
+## Who it is for
+
+1. The owner, as an everyday browser.
+2. An open-source product others can use.
+3. Later, a commercial layer on top that plugs into the open core and is never
+   required by it.
+
+## What Wren aims to do
+
+- **Be light by design.** Rust and Servo, tab sleeping, built-in ad blocking
+  and a published RAM benchmark against Chrome.
+- **Work like Chrome.** Chrome extensions, Chrome DevTools, password managers
+  and passkeys, WebAssembly.
+- **Be AI-native.** Bring your own model or a local Ollama, an agent that
+  reads and acts with your confirmation, WebMCP, generated answer pages that
+  stay live and routines that always ask before paying.
+- **Stay open source.** AGPL-3.0-or-later, no telemetry, local-first.
+
+## Next steps
+
+- Read the [roadmap](/wren/docs/roadmap/).
+- [Build from source](/wren/docs/build/) (not available yet).
+- [Contributing](/wren/docs/contributing/).

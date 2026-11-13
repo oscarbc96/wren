@@ -1,0 +1,48 @@
+{
+  "name": "wren-site",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "format": "bun fmt",
+    "lint": "bun fmt --check && bun check",
+    "check": "bun run lint && astro check && linkinator dist --silent",
+    "test": "bun test",
+    "check-translations": "bun scripts/check-translations.ts",
+    "lighthouse": "lhci autorun --config=lighthouserc.cjs",
+    "serve": "bun scripts/serve-dist.ts"
+  },
+  "dependencies": {
+    "@astrojs/react": "^7.1.8",
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource/inter": "^5.3.0",
+    "@fumadocs/astro": "0.3.0",
+    "@fumadocs/changelog": "^0.1.0",
+    "@tailwindcss/vite": "^4.3.5",
+    "astro": "^7.4.11",
+    "cn": "^0.5.2",
+    "fumadocs-core": "16.19.0",
+    "fumadocs-ui": "16.19.0",
+    "lucide-react": "^1.72.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "satori": "^0.63.2",
+    "sharp": "^0.35.5",
+    "tailwindcss": "^4.3.5"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.12",
+    "@lhci/cli": "^0.16.1",
+    "@types/bun": "^1.4.4",
+    "@types/mdx": "^2.0.14",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "linkinator": "^8.1.0",
+    "turbo": "^2.11.11",
+    "typescript": "^6"
+  },
+  "packageManager": "bun@1.4.4"
+}
