@@ -1,0 +1,54 @@
+# Dependabot version updates. Weekly, Mondays 06:00 Europe/Madrid; minor and
+# patch bumps are grouped into one PR per ecosystem, majors get their own PR.
+# PR titles must be Conventional Commits (PR-title check, release-please), so
+# each ecosystem sets a `chore(deps)` or `ci(deps)` prefix.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Madrid
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      cargo-minor-patch:
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # GPUI and the reused Zed crates share one git rev on purpose (spec
+      # section 3, Dependencies); bump them by hand, all together.
+      - dependency-name: gpui
+      - dependency-name: gpui_platform
+      - dependency-name: ui
+      - dependency-name: theme
+      - dependency-name: component
+      - dependency-name: menu
+      - dependency-name: icons
+      - dependency-name: ui_input
+      # Servo is pinned exactly and bumped deliberately.
+      - dependency-name: servo
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Madrid
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      actions-minor-patch:
+        update-types:
+          - minor
+          - patch

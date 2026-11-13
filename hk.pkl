@@ -1,0 +1,74 @@
+amends "package://github.com/jdx/hk/releases/download/v2.12.0/hk@2.12.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v2.12.0/hk@2.12.0#/Builtins.pkl"
+
+// Git hooks and local checks. Install once per clone: `hk install --mise`.
+// Run by hand: `hk check` (changed files), `hk check --all`, `hk fix`.
+// Builtins as shipped; repo specifics live in `exclude` and `env` below.
+
+fail_fast = false
+
+exclude = List(
+  "target/**",
+  // Verbatim upstream texts.
+  "LICENSE",
+  "CODE_OF_CONDUCT.md",
+)
+
+local steps_all = new Mapping<String, Step> {
+  ["newlines"] = Builtins.newlines
+  ["trailing_whitespace"] = Builtins.trailing_whitespace
+  ["mixed_line_ending"] = Builtins.mixed_line_ending
+  ["check_merge_conflict"] = Builtins.check_merge_conflict
+  ["cargo_fmt"] = Builtins.cargo_fmt
+  ["cargo_clippy"] = Builtins.cargo_clippy
+  ["taplo"] = Builtins.taplo
+  ["actionlint"] = Builtins.actionlint
+  ["mise"] = Builtins.mise
+  ["typos"] = Builtins.typos
+  // Vendor agent paths must be symlinks into .agents/ (spec section 3).
+  // No builtin does this.
+  ["agents_symlinks"] {
+    check = """
+      bad=0
+      for p in CLAUDE.md .claude/skills .claude/agents; do
+        if [ -e "$p" ] && [ ! -L "$p" ]; then echo "$p must be a symlink"; bad=1; fi
+      done
+      if [ -d .claude ]; then
+        for f in .claude/* .claude/.[!.]*; do
+          [ -e "$f" ] || [ -L "$f" ] || continue
+          [ -L "$f" ] || { echo "$f must be a symlink"; bad=1; }
+        done
+      fi
+      exit $bad
+      """
+  }
+}
+
+hooks {
+  ["pre-commit"] {
+    fix = true
+    stash = "git"
+    steps {
+      ...steps_all
+      ["check_added_large_files"] = Builtins.check_added_large_files
+      ["gitleaks"] = (Builtins.gitleaks) { scan = "staged" }
+    }
+  }
+  ["pre-push"] {
+    steps {
+      // No builtin runs the repo test task.
+      ["test"] { check = "mise run test" }
+    }
+  }
+  ["check"] {
+    steps {
+      ...steps_all
+    }
+  }
+  ["fix"] {
+    fix = true
+    steps {
+      ...steps_all
+    }
+  }
+}

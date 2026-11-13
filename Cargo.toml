@@ -1,0 +1,50 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+edition = "2024"
+license = "AGPL-3.0-or-later"
+
+# GPUI and reused Zed crates share one Zed git rev (spec section 3, Dependencies).
+[workspace.dependencies]
+servo = "=0.8.0"
+gpui = { git = "https://github.com/zed-industries/zed", rev = "d3fc053d5b62386247b15f069871eabe817032ab" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "d3fc053d5b62386247b15f069871eabe817032ab", default-features = false, features = [
+  "font-kit",
+] }
+gpui_apple = { git = "https://github.com/zed-industries/zed", rev = "d3fc053d5b62386247b15f069871eabe817032ab", features = [
+  "font-kit",
+] }
+theme = { git = "https://github.com/zed-industries/zed", rev = "d3fc053d5b62386247b15f069871eabe817032ab" }
+ui = { git = "https://github.com/zed-industries/zed", rev = "d3fc053d5b62386247b15f069871eabe817032ab" }
+component = { git = "https://github.com/zed-industries/zed", rev = "d3fc053d5b62386247b15f069871eabe817032ab" }
+menu = { git = "https://github.com/zed-industries/zed", rev = "d3fc053d5b62386247b15f069871eabe817032ab" }
+icons = { git = "https://github.com/zed-industries/zed", rev = "d3fc053d5b62386247b15f069871eabe817032ab" }
+ui_input = { git = "https://github.com/zed-industries/zed", rev = "d3fc053d5b62386247b15f069871eabe817032ab" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["raw_value"] }
+thiserror = "2"
+anyhow = "1.0"
+clap = { version = "4", features = ["derive"] }
+url = "2"
+jiff = "0.2"
+raw-window-handle = "0.6"
+objc2-app-kit = "0.3"
+psl = "2"
+idna = "1"
+unicode-script = "0.5"
+sysinfo = "0.40"
+rusqlite = { version = "0.42", features = ["bundled"] }
+rusqlite_migration = "2.7"
+insta = "1.49"
+tempfile = "3"
+dirs = "7"
+
+# Keep debug builds small on disk: line tables keep backtraces readable,
+# dependencies carry no debug info.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
