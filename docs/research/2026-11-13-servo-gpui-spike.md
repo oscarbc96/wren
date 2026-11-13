@@ -79,8 +79,21 @@ The child-NSView approach works in this environment: Servo renders into an `NSVi
 
 - Earlier spike hosted Servo in a `winit` window (`servo_in_winit.rs`) because combining Servo and GPUI-CE had resolver/link conflicts at that time. The freetype and sqlite conflicts noted previously were addressed in the workspace/vendor patches already present on this branch; `cargo build -p wren --examples` now builds both examples together.
 
+## ServoEngine
+
+- Multiprocess: on (`ServoBuilder` configured with `Opts { multiprocess: true, ..Default::default() }`).
+- Content processes: one per web view. `--two` shows two children of the browser process (`pgrep -P`), each started as the same binary with `--content-process <token>`; `content_pids()` attributes them to web views 0 and 1.
+- RSS of the whole process tree (debug build): two tabs (example.org + servo.org) 337 to 426 MB, versus 253 MB for the same two tabs single-process. Per-tab process overhead is roughly 40 to 85 MB in debug; measure release in Task 9.
+- Killing one content process (`kill -9`): the browser and the other tab keep running; the engine reports `Crashed { reason: "content process <pid> exited" }` for that tab. Servo 0.8 itself reports nothing, so the engine watches its child processes every 250 ms.
+- Servo 0.8 graceful shutdown never finishes after a content process died (its constellation waits on the dead pipeline); `ServoEngine::shutdown` then kills the remaining children and leaks Servo instead of dropping it.
+- Killing the browser process with `kill -9`: content processes notice the parent change and exit within 0.5 s (watchdog thread in `content_process_main`).
+- New-window requests from a page (`request_create_new`) carry no URL in Servo 0.8, so `OpenTab` uses `about:blank` for now.
+
+`ServoEngine` (crate `engine`) owns one child NSView inside the provided parent AppKit view, creates one `WindowRenderingContext` for that view, and manages `WebView` instances through the `Engine` trait (`create/close/load/back/forward/reload/show/hide/spin/drain_events`). The example tick task polls `spin()` and `drain_events()` every 8 ms; the `EventLoopWaker` passed to `ServoEngine::new` is currently a no-op while polling remains.
+
 ## Files
 
 - `crates/wren/examples/servo_in_winit.rs`
 - `crates/wren/examples/servo_in_gpui.rs`
+- `crates/engine/src/servo_engine.rs`
 - `docs/research/2026-11-13-servo-gpui-spike.md`

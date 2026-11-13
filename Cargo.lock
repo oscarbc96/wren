@@ -2304,6 +2304,14 @@ checksum = "66b7e2430c6dff6a955451e2cfc438f09cea1965a9d6f87f7e3b90decc014099"
 name = "engine"
 version = "0.0.0"
 dependencies = [
+ "anyhow",
+ "dpi",
+ "objc2 0.6.5",
+ "objc2-app-kit 0.3.2",
+ "objc2-foundation 0.3.2",
+ "raw-window-handle",
+ "servo",
+ "sysinfo 0.40.3",
  "url",
 ]
 
@@ -12760,6 +12768,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "clap",
+ "engine",
  "gpui-ce",
  "gpui_ce_platform",
  "objc2 0.6.5",
