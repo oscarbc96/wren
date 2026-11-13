@@ -1,0 +1,18 @@
+[package]
+name = "components"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+gpui = { workspace = true }
+gpui_elements = { workspace = true }
+themes = { path = "../themes" }
+
+[dev-dependencies]
+gpui = { workspace = true, features = ["test-support"] }
+themes = { path = "../themes" }

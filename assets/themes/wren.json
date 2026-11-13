@@ -1,0 +1,34 @@
+{
+  "name": "Wren",
+  "author": "Wren",
+  "themes": [
+    {
+      "name": "Wren Light",
+      "appearance": "light",
+      "style": {
+        "background": "#f4efe6ff",
+        "surface": "#fbf8f2ff",
+        "border": "#d9d0c0ff",
+        "text": "#2b2620ff",
+        "muted_text": "#7a7060ff",
+        "accent": "#c96442ff",
+        "accent_text": "#fffaf2ff",
+        "danger": "#b33a2bff"
+      }
+    },
+    {
+      "name": "Wren Dark",
+      "appearance": "dark",
+      "style": {
+        "background": "#1c1a17ff",
+        "surface": "#26231fff",
+        "border": "#3a352fff",
+        "text": "#e8e2d9ff",
+        "muted_text": "#9a9080ff",
+        "accent": "#d97857ff",
+        "accent_text": "#1c1a17ff",
+        "danger": "#e05a4aff"
+      }
+    }
+  ]
+}
