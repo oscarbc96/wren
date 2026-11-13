@@ -1,6 +1,6 @@
 [files]
 # Translations (docs/*.<locale>.mdx, src/i18n) are not English, so typos would flag them.
-extend-exclude = ["LICENSE", "target/**", "site/node_modules/**", "site/dist/**", "docs/research/**", "site/content/docs/*.*.mdx", "site/src/i18n/**", "site/tests/**", "crates/providers/*/*/tests/fixtures/spike/**"]
+extend-exclude = ["LICENSE", "target/**", "vendor/**", "site/node_modules/**", "site/dist/**", "docs/research/**", "site/content/docs/*.*.mdx", "site/src/i18n/**", "site/tests/**", "crates/providers/*/*/tests/fixtures/spike/**"]
 
 [default]
 # CSS unicode-range values (U+0100-02BA) look like words.

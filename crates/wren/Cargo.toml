@@ -9,3 +9,14 @@ name = "wren"
 path = "src/main.rs"
 
 [dependencies]
+
+[dev-dependencies]
+servo = { workspace = true }
+winit = "0.30"
+clap = { workspace = true }
+url = { workspace = true }
+anyhow = { workspace = true }
+sysinfo = { workspace = true }
+embedder-traits = { package = "servo-embedder-traits", version = "=0.8.0" }
+tracing = "0.1"
+rustls = { version = "0.23", features = ["aws_lc_rs"] }
