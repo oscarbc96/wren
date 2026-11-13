@@ -69,23 +69,35 @@ fn title_and_url_events_update_tab() {
     let mut strip = TabStrip::new(25);
     let _id = strip.open(&mut e, &url("https://a/"), true);
     let wv = strip.tabs()[0].webview;
-    strip.apply(&mut e, &EngineEvent::TitleChanged {
-        id: wv,
-        title: "Title".into(),
-    });
-    strip.apply(&mut e, &EngineEvent::UrlChanged {
-        id: wv,
-        url: url("https://b/"),
-    });
-    strip.apply(&mut e, &EngineEvent::Load {
-        id: wv,
-        state: LoadState::Started,
-    });
-    strip.apply(&mut e, &EngineEvent::History {
-        id: wv,
-        can_back: true,
-        can_forward: false,
-    });
+    strip.apply(
+        &mut e,
+        &EngineEvent::TitleChanged {
+            id: wv,
+            title: "Title".into(),
+        },
+    );
+    strip.apply(
+        &mut e,
+        &EngineEvent::UrlChanged {
+            id: wv,
+            url: url("https://b/"),
+        },
+    );
+    strip.apply(
+        &mut e,
+        &EngineEvent::Load {
+            id: wv,
+            state: LoadState::Started,
+        },
+    );
+    strip.apply(
+        &mut e,
+        &EngineEvent::History {
+            id: wv,
+            can_back: true,
+            can_forward: false,
+        },
+    );
     let tab = &strip.tabs()[0];
     assert_eq!(tab.title, "Title");
     assert_eq!(tab.url, url("https://b/"));
@@ -100,10 +112,13 @@ fn open_tab_event_opens_after_opener() {
     let mut strip = TabStrip::new(25);
     let _a = strip.open(&mut e, &url("https://a/"), true);
     let wv = strip.tabs()[0].webview;
-    strip.apply(&mut e, &EngineEvent::OpenTab {
-        opener: wv,
-        url: url("https://b/"),
-    });
+    strip.apply(
+        &mut e,
+        &EngineEvent::OpenTab {
+            opener: wv,
+            url: url("https://b/"),
+        },
+    );
     assert_eq!(strip.tabs().len(), 2);
     assert_eq!(strip.tabs()[1].url, url("https://b/"));
     assert_ne!(strip.tabs()[1].webview, wv, "a real webview is created");
@@ -117,10 +132,13 @@ fn crashed_tab_reloads_with_new_webview() {
     let mut strip = TabStrip::new(25);
     let id = strip.open(&mut e, &url("https://a/"), true);
     let old_wv = strip.tabs()[0].webview;
-    strip.apply(&mut e, &EngineEvent::Crashed {
-        id: old_wv,
-        reason: "boom".into(),
-    });
+    strip.apply(
+        &mut e,
+        &EngineEvent::Crashed {
+            id: old_wv,
+            reason: "boom".into(),
+        },
+    );
     assert_eq!(strip.tabs()[0].crashed.as_deref(), Some("boom"));
     strip.reload_crashed(&mut e, id);
     assert!(strip.tabs()[0].crashed.is_none());
@@ -142,10 +160,13 @@ fn snapshot_restore_roundtrip() {
     let _b = strip.open(&mut e, &url("https://b/"), false);
     // set title
     let wv = strip.tabs()[0].webview;
-    strip.apply(&mut e, &EngineEvent::TitleChanged {
-        id: wv,
-        title: "A".into(),
-    });
+    strip.apply(
+        &mut e,
+        &EngineEvent::TitleChanged {
+            id: wv,
+            title: "A".into(),
+        },
+    );
     let snap = strip.snapshot();
     // restore into new engine
     let mut e2 = FakeEngine::default();
@@ -171,4 +192,3 @@ fn changed_flag() {
     strip.close(&mut e, id2);
     assert!(strip.changed());
 }
-
