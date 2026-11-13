@@ -2,7 +2,7 @@ use clap::Parser;
 
 /// Wren browser command line interface.
 #[derive(Debug, Clone, Parser)]
-#[command(name = "wren")]
+#[command(name = "wren", version)]
 pub struct Args {
     /// Profile directory. Sets both config and data dir.
     #[arg(long)]
