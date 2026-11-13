@@ -53,6 +53,58 @@ pub struct ViewRect {
     pub height: f32,
 }
 
+/// Mouse button used for page input.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MouseButton {
+    Left,
+    Right,
+    Middle,
+}
+
+/// Keyboard modifiers for page input.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Modifiers {
+    pub shift: bool,
+    pub ctrl: bool,
+    pub alt: bool,
+    pub cmd: bool,
+}
+
+/// Input forwarded from the UI to the engine.
+///
+/// Coordinates are in points relative to the shown view's top-left.
+/// `dx`/`dy` are in points. `key` is the DOM key value, `code` the DOM code.
+#[derive(Debug, Clone, PartialEq)]
+pub enum EngineInput {
+    MouseMove {
+        x: f32,
+        y: f32,
+    },
+    MouseDown {
+        button: MouseButton,
+        x: f32,
+        y: f32,
+    },
+    MouseUp {
+        button: MouseButton,
+        x: f32,
+        y: f32,
+    },
+    Wheel {
+        dx: f32,
+        dy: f32,
+        x: f32,
+        y: f32,
+    },
+    Key {
+        down: bool,
+        key: String,
+        code: String,
+        modifiers: Modifiers,
+    },
+    MouseLeft,
+}
+
 /// Abstract browser engine.
 pub trait Engine {
     fn create(&mut self, url: &Url) -> WebViewId;
@@ -63,6 +115,7 @@ pub trait Engine {
     fn reload(&mut self, id: WebViewId);
     fn show(&mut self, id: WebViewId, rect: ViewRect);
     fn hide(&mut self, id: WebViewId);
+    fn input(&mut self, _id: WebViewId, _ev: EngineInput) {}
     fn spin(&mut self);
     fn drain_events(&mut self) -> Vec<EngineEvent>;
     fn shutdown(&mut self) {}

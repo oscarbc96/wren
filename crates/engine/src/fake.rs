@@ -1,6 +1,6 @@
 //! In-memory `Engine` implementation used by tests.
 
-use crate::api::{Engine, EngineEvent, ViewRect, WebViewId};
+use crate::api::{Engine, EngineEvent, EngineInput, ViewRect, WebViewId};
 use url::Url;
 
 /// One recorded call made to a `FakeEngine`.
@@ -14,6 +14,7 @@ pub enum FakeCall {
     Reload { id: WebViewId },
     Show { id: WebViewId, rect: ViewRect },
     Hide { id: WebViewId },
+    Input(WebViewId, EngineInput),
     Spin,
     DrainEvents,
 }
@@ -77,6 +78,10 @@ impl Engine for FakeEngine {
 
     fn hide(&mut self, id: WebViewId) {
         self.calls.push(FakeCall::Hide { id });
+    }
+
+    fn input(&mut self, id: WebViewId, ev: EngineInput) {
+        self.calls.push(FakeCall::Input(id, ev));
     }
 
     fn spin(&mut self) {
