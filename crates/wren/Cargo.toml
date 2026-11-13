@@ -9,6 +9,7 @@ name = "wren"
 path = "src/main.rs"
 
 [dependencies]
+engine = { path = "../engine" }
 
 [dev-dependencies]
 servo = { workspace = true }

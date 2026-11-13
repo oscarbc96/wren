@@ -6,3 +6,11 @@ license.workspace = true
 
 [dependencies]
 url = { workspace = true }
+servo = { workspace = true }
+raw-window-handle = { workspace = true }
+objc2-app-kit = { workspace = true }
+objc2 = "0.6"
+objc2-foundation = "0.3"
+anyhow = { workspace = true }
+sysinfo = { workspace = true }
+dpi = "0.1.2"
