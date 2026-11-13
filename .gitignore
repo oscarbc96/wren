@@ -1,1 +1,13 @@
+/target
+/site/node_modules
+/site/dist
+/site/dist-tests
+/site/.astro
+.DS_Store
+*.log
+.env
+.env.*
+/site/.turbo
+/site/.lighthouseci
+/site/.linkinator
 .coder-report.md

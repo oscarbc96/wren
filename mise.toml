@@ -1,0 +1,117 @@
+[tools]
+rust = { version = "1.100", components = "rustfmt,clippy" }
+bun = "1.4.4"
+hk = "2.12.0"
+pkl = "latest"
+"cargo:cargo-nextest" = "latest"
+"cargo:cargo-deny" = "latest"
+"cargo:cargo-packager" = "0.11.8"
+"cargo:cargo-about" = "latest"
+"aqua:rhysd/actionlint" = "latest"
+shellcheck = "latest"
+taplo = "latest"
+typos = "latest"
+gitleaks = "latest"
+ripgrep = "latest"
+
+[env]
+CARGO_INCREMENTAL = "0"
+TURBO_TELEMETRY_DISABLED = "1"
+
+[tasks.build]
+description = "Build the whole workspace"
+run = "cargo build --workspace"
+
+[tasks.run]
+description = "Build, sign with the dev identity (see dev:cert) and run the Wren app"
+run = [
+  "cargo build -p wren",
+  "scripts/dev-sign.sh target/debug/wren",
+  "target/debug/wren",
+]
+
+[tasks."dev:cert"]
+description = "Create the local code-signing identity \"Wren Dev (local)\" once, so keychain Always Allow survives rebuilds (macOS asks for your login password once)"
+run = "scripts/dev-cert.sh"
+
+[tasks.test]
+description = "Run all tests with nextest"
+run = "cargo nextest run --workspace --no-tests=pass"
+
+[tasks."test:perf"]
+description = "Run timing-sensitive tests (best on an idle machine)"
+run = "cargo nextest run --workspace --run-ignored ignored-only"
+
+[tasks."test:repo"]
+description = "Test repo tooling scripts (Bun): PR body check"
+run = "bun test tests/repo"
+
+[tasks."lint:pr-body"]
+description = "Check a PR body against the template: lint:pr-body -- --body-file <file> --title <title> [--base <sha>]"
+run = "bun scripts/pr-body.ts"
+
+[tasks.lint]
+description = "Run every hk check on all files"
+run = "hk check --all"
+
+[tasks.fmt]
+description = "Run every hk fixer on all files"
+run = "hk fix --all"
+
+[tasks.bundle]
+description = "Build the Wren.app dev bundle into target/release, signed with the dev identity (ad hoc without it)"
+run = [
+  "cargo build --release -p wren",
+  "cargo packager -p wren --release --formats app --out-dir target/release",
+  "scripts/dev-sign.sh --adhoc-fallback target/release/Wren.app",
+]
+
+[tasks."bundle:run"]
+description = "Run the bundled app so logs reach the terminal"
+run = "target/release/Wren.app/Contents/MacOS/wren"
+
+[tasks."site:install"]
+description = "Install site dependencies"
+dir = "site"
+run = "bun install --frozen-lockfile"
+
+[tasks."site:dev"]
+description = "Run the docs site dev server"
+dir = "site"
+depends = ["site:install"]
+run = "bun run dev"
+
+[tasks."site:build"]
+description = "Build the docs site"
+dir = "site"
+depends = ["site:install"]
+run = "bun run t:build"
+
+[tasks."site:test"]
+description = "Test the docs site"
+dir = "site"
+depends = ["site:install"]
+run = "bun run t:test"
+
+[tasks."site:lint"]
+description = "Lint the docs site"
+dir = "site"
+depends = ["site:install"]
+run = "bun run t:lint"
+
+[tasks."site:verify"]
+description = "Lint, type-check and link-check the built docs site"
+dir = "site"
+depends = ["site:install", "site:build"]
+run = "bun run t:verify"
+
+[tasks."site:lighthouse"]
+description = "Lighthouse CI and byte budgets against the built site"
+dir = "site"
+depends = ["site:install", "site:build"]
+run = "bun run t:lighthouse"
+
+[tasks."site:check-translations"]
+description = "Check every locale is in step with English: site:check-translations -- [--staged | --base <sha>]"
+dir = "site"
+run = "bun run check-translations"

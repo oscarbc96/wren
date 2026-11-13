@@ -1,0 +1,24 @@
+Wren
+Copyright (c) the Wren contributors
+Licensed under the GNU Affero General Public License, version 3 or later.
+See LICENSE.
+
+Third-party software
+--------------------
+Wren embeds the Servo web engine (https://servo.org), licensed under
+MPL-2.0. Servo, Stylo, WebRender and SpiderMonkey keep their MPL-2.0
+headers; they are combined with Wren's AGPL-3.0-or-later code under MPL 3.3.
+
+Wren is built on GPUI and other crates from the Zed project
+(https://github.com/zed-industries/zed), used at the git revision pinned in
+Cargo.toml. GPUI-family crates are licensed under Apache-2.0; Zed crates that
+Wren uses, such as ui, theme and component, are licensed under
+GPL-3.0-or-later. Original copyright and licence headers are kept in any code
+copied from Zed.
+
+Tooling and scripts copied from the owner's template are licensed under
+AGPL-3.0-or-later.
+
+The full list of third-party crates and their licences is generated with
+`cargo about` and shipped with each release. Until then, run `cargo deny list`
+to see the licences in the dependency tree.
