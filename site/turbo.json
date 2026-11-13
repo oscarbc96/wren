@@ -45,7 +45,9 @@
       "env": ["WREN_CHANGELOG_FIXTURE", "WREN_STARS_FIXTURE"],
       "passThroughEnv": ["GITHUB_TOKEN"]
     },
+    // `bun check` inside lint also runs the link check over dist/.
     "lint": {
+      "dependsOn": ["build"],
       "inputs": [
         "src/**",
         "content/**",
