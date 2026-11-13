@@ -1,0 +1,44 @@
+---
+title: Introducción
+description: Qué es Wren, para quién es y en qué punto está.
+---
+
+Wren es un navegador de escritorio de código abierto. Está escrito en Rust sobre
+el motor [Servo](https://servo.org). Pretende usar la mitad de memoria que
+Chrome, ejecutar extensiones de Chrome y ofrecer un agente de IA que tú
+controlas.
+
+**Estado: pre-alfa, en diseño.** Todavía no hay nada que descargar. El primer
+hito (M0) no se ha publicado.
+
+## Por qué Wren
+
+Chrome es el navegador por defecto para la mayoría de la gente y pesa mucho.
+Todas las alternativas serias o usan Chromium por debajo o no son utilizables
+a diario. Wren es una carcasa de producto alrededor del motor Servo, con las
+funciones que la gente necesita para dejar Chrome y una capa de IA diseñada
+desde el principio, no añadida después.
+
+## Para quién es
+
+1. El propietario, como navegador del día a día.
+2. Un producto de código abierto que otros puedan usar.
+3. Más adelante, una capa comercial encima que se conecta al núcleo abierto y
+   nunca es obligatoria.
+
+## Qué se propone Wren
+
+- **Ligero por diseño.** Rust y Servo, pestañas que duermen, bloqueo de
+  anuncios integrado y un punto de referencia público de RAM frente a Chrome.
+- **Funciona como Chrome.** Extensiones de Chrome, Chrome DevTools, gestores
+  de contraseñas y passkeys, WebAssembly.
+- **Nativo para IA.** Trae tu propio modelo o un Ollama local, un agente que
+  lee y actúa con tu confirmación, WebMCP, páginas de respuesta generadas que
+  siguen vivas y rutinas que siempre preguntan antes de pagar.
+- **Código abierto.** AGPL-3.0-or-later, sin telemetría, local primero.
+
+## Siguientes pasos
+
+- Lee la [hoja de ruta](/wren/es/docs/roadmap/).
+- [Compilar desde el código fuente](/wren/es/docs/build/) (aún no disponible).
+- [Contribuir](/wren/es/docs/contributing/).

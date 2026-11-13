@@ -1,0 +1,109 @@
+---
+import "@/styles/global.css";
+import interLatin from "@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url";
+import { defaultLocale, getUi, localeCodes, localePath } from "@/i18n";
+import { absoluteUrl, alternatesFor, ogImageUrl, ogLocale, siteName } from "@/lib/seo";
+
+interface Props {
+  title: string;
+  description: string;
+  locale?: string;
+  /** Locale-free path of the page, starting and ending with `/`. */
+  path: string;
+  /** Key of the generated Open Graph image (see `lib/pages.ts`). */
+  ogKey?: string;
+  ogType?: "website" | "article";
+  /** schema.org objects, rendered as one JSON-LD script each. */
+  jsonLd?: Record<string, unknown>[];
+  /** Error pages: kept out of the index and without alternates. */
+  noindex?: boolean;
+  /** Absolute-path URL of an Atom feed to advertise. */
+  feed?: { href: string; title: string };
+}
+
+const {
+  title,
+  description,
+  path,
+  ogKey,
+  ogType = "website",
+  jsonLd = [],
+  noindex = false,
+  feed,
+} = Astro.props;
+const locale = Astro.props.locale ?? Astro.currentLocale ?? defaultLocale;
+const ui = getUi(locale);
+const canonical = absoluteUrl(locale, path);
+const alternates = noindex ? [] : alternatesFor(path);
+const image = ogKey ? ogImageUrl(locale, ogKey) : undefined;
+const speculation = JSON.stringify({
+  prefetch: [
+    {
+      where: { href_matches: `${localePath(defaultLocale, "/").replace(/\/$/, "")}/*` },
+      eagerness: "moderate",
+    },
+  ],
+});
+// Same preference store as the docs theme switch (next-themes: `theme`), applied before paint.
+const theme = `try{var t=localStorage.getItem("theme");if(t==="dark"||(t!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.classList.add("dark")}catch(e){}`;
+---
+
+<!doctype html>
+<html lang={locale}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    {!noindex && <link rel="canonical" href={canonical} />}
+    {noindex && <meta name="robots" content="noindex" />}
+    {alternates.map((a) => <link rel="alternate" hreflang={a.hreflang} href={a.href} />)}
+    <meta property="og:site_name" content={siteName} />
+    <meta property="og:type" content={ogType} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:locale" content={ogLocale(locale)} />
+    {
+      !noindex &&
+        localeCodes
+          .filter((code) => code !== locale)
+          .map((code) => <meta property="og:locale:alternate" content={ogLocale(code)} />)
+    }
+    {
+      image && (
+        <>
+          <meta property="og:image" content={image} />
+          <meta property="og:image:type" content="image/png" />
+          <meta property="og:image:width" content="1200" />
+          <meta property="og:image:height" content="630" />
+          <meta property="og:image:alt" content={title} />
+        </>
+      )
+    }
+    <meta name="twitter:card" content={image ? "summary_large_image" : "summary"} />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    {image && <meta name="twitter:image" content={image} />}
+    {image && <meta name="twitter:image:alt" content={title} />}
+    <link rel="icon" type="image/svg+xml" href={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/favicon.svg`} />
+    {feed && <link rel="alternate" type="application/atom+xml" href={feed.href} title={feed.title} />}
+    <link rel="preload" href={interLatin} as="font" type="font/woff2" crossorigin />
+    <script is:inline set:html={theme} />
+    <script is:inline type="speculationrules" set:html={speculation} />
+    {jsonLd.map((data) => <script is:inline type="application/ld+json" set:html={JSON.stringify(data)} />)}
+  </head>
+  <body>
+    <slot />
+    <footer class="border-t border-fd-border bg-fd-card">
+      <div class="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-8 sm:px-6">
+        <p class="flex flex-wrap gap-x-5 gap-y-2 text-sm text-fd-muted-foreground">
+          <span>{ui.footer.license}</span>
+          <a class="hover:text-fd-primary" href="https://github.com/oscarbc96/wren">{ui.footer.source}</a>
+          <a class="hover:text-fd-primary" href={localePath(locale, "/llms.txt")}>{ui.footer.llms}</a>
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

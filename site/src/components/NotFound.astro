@@ -1,0 +1,28 @@
+---
+import Layout from "@/layouts/Layout.astro";
+import SiteHeader from "@/components/SiteHeader.astro";
+import { getUi, localePath, nonDefaultLocales } from "@/i18n";
+
+interface Props {
+  locale: string;
+  /** Default-locale page only: GitHub Pages serves one 404 for the whole site, so hand over to the visitor's locale. */
+  redirect?: boolean;
+}
+
+const { locale, redirect = false } = Astro.props;
+const ui = getUi(locale);
+const t = ui.notFound;
+const handover = `var l=${JSON.stringify(nonDefaultLocales.map((code) => [code, localePath(code, "/")]))};for(var i=0;i<l.length;i++)if(location.pathname.indexOf(l[i][1])===0){location.replace(l[i][1]+"404/");break}`;
+---
+
+<Layout title={t.title} description={t.description} locale={locale} path="/404/" noindex>
+  {redirect && nonDefaultLocales.length > 0 && <script is:inline set:html={handover} />}
+  <SiteHeader locale={locale} path="/" />
+  <main class="mx-auto w-full max-w-5xl px-4 py-24 sm:px-6">
+    <h1 class="text-3xl font-semibold tracking-tight text-fd-foreground">{t.heading}</h1>
+    <p class="mt-3 max-w-xl text-base leading-7 text-fd-muted-foreground">{t.text}</p>
+    <p class="mt-6">
+      <a class="font-medium text-fd-primary underline" href={localePath(locale, "/")}>{t.home}</a>
+    </p>
+  </main>
+</Layout>

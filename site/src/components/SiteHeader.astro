@@ -1,0 +1,66 @@
+---
+import { getUi, locales, localePath } from "@/i18n";
+import { repoUrl } from "@/lib/seo";
+
+/**
+ * Static site header: no JavaScript. Used by every page that has no React
+ * island (landing, changelog, 404). The docs keep the Fumadocs layout.
+ */
+interface Props {
+  locale: string;
+  /** Locale-free path of the current page, to link the same page in other languages. */
+  path: string;
+  stars?: string;
+  /** Current section, for `aria-current`. */
+  section?: "home" | "docs" | "changelog";
+}
+
+const { locale, path, stars, section } = Astro.props;
+const ui = getUi(locale);
+const tr = ui.translations;
+const modes = [
+  ["light", tr["Light(theme switcher)(aria-label)"] ?? "Light", "☀"],
+  ["dark", tr["Dark(theme switcher)(aria-label)"] ?? "Dark", "☾"],
+  ["system", tr["System(theme switcher)(aria-label)"] ?? "System", "◐"],
+] as const;
+// Same store as the docs theme switch (next-themes keeps `theme` in localStorage).
+const themeScript = `var b=document.querySelectorAll("[data-theme-set]");function s(v){for(var i=0;i<b.length;i++)b[i].setAttribute("aria-pressed",String(b[i].dataset.themeSet===v))}var c="system";try{c=localStorage.getItem("theme")||"system"}catch(e){}s(c);for(var i=0;i<b.length;i++)b[i].addEventListener("click",function(){var v=this.dataset.themeSet;try{localStorage.setItem("theme",v)}catch(e){}document.documentElement.classList.toggle("dark",v==="dark"||(v==="system"&&matchMedia("(prefers-color-scheme: dark)").matches));s(v)})`;
+const link =
+  "rounded-md px-3 py-2 text-sm text-fd-muted-foreground no-underline transition-colors hover:text-fd-foreground";
+---
+
+<header class="border-b border-fd-border bg-fd-background">
+  <div class="mx-auto flex max-w-5xl flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2 sm:px-6">
+    <a
+      class="wren-wordmark mr-4 py-2 text-lg text-fd-foreground no-underline"
+      href={localePath(locale, "/")}
+      aria-label="Wren">Wren</a
+    >
+    <nav class="flex flex-wrap items-center" aria-label={ui.nav.main}>
+      <a class={link} href={localePath(locale, "/docs/")} aria-current={section === "docs" ? "page" : undefined}>{ui.nav.docs}</a>
+      <a class={link} href={localePath(locale, "/changelog/")} aria-current={section === "changelog" ? "page" : undefined}>{ui.nav.changelog}</a>
+      <a class={link} href={repoUrl}>{ui.nav.github}{stars && <span class="ml-1 text-xs" aria-label={ui.starsLabel.replace("{count}", stars)}>★ {stars}</span>}</a>
+    </nav>
+    <nav class="ml-auto flex flex-wrap items-center" aria-label={ui.language}>
+      {
+        locales.map((item) => (
+          <a
+            class={link}
+            href={localePath(item.code, path)}
+            lang={item.code}
+            hreflang={item.code}
+            aria-current={item.code === locale ? "true" : undefined}>{item.name}</a
+          >
+        ))
+      }
+    </nav>
+    <div class="flex items-center rounded-full border border-fd-border p-0.5" role="group" aria-label={tr["Toggle Theme(theme switcher)(aria-label)"] ?? "Toggle theme"}>
+      {
+        modes.map(([mode, label, icon]) => (
+          <button type="button" class="size-8 rounded-full text-sm text-fd-muted-foreground aria-pressed:bg-fd-muted aria-pressed:text-fd-foreground" data-theme-set={mode} aria-label={label} aria-pressed="false">{icon}</button>
+        ))
+      }
+    </div>
+    <script is:inline set:html={themeScript} />
+  </div>
+</header>

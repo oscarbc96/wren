@@ -1,0 +1,77 @@
+---
+import Layout from "@/layouts/Layout.astro";
+import SiteHeader from "@/components/SiteHeader.astro";
+import { absoluteUrl, siteName } from "@/lib/seo";
+import { ChangelogPagination, ChangelogTimeline } from "@/components/changelog";
+import { getUi, localePath } from "@/i18n";
+import { getStars } from "@/lib/github";
+import type { GitHubChangelogEntry } from "@fumadocs/changelog/github";
+
+interface Props {
+  locale: string;
+  /** 1-based page number. */
+  page: number;
+  /** Total number of pages (at least 1). */
+  total: number;
+  entries: GitHubChangelogEntry[];
+}
+
+const { locale, page, total, entries } = Astro.props;
+const t = getUi(locale).changelog;
+const stars = await getStars();
+const labels = {
+  dateLocale: t.dateLocale,
+  prerelease: t.prerelease,
+  newer: t.newer,
+  older: t.older,
+};
+const pagePath = (n: number) => (n === 1 ? "/changelog/" : `/changelog/${n}/`);
+const url = (n: number) => localePath(locale, pagePath(n));
+---
+
+<Layout
+  title={page > 1 ? `${t.title} (${page})` : t.title}
+  description={t.description}
+  locale={locale}
+  path={pagePath(page)}
+  ogKey="changelog"
+  feed={{ href: localePath(locale, "/changelog/atom.xml"), title: t.title }}
+  jsonLd={[
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: siteName, item: absoluteUrl(locale, "/") },
+        { "@type": "ListItem", position: 2, name: t.heading, item: absoluteUrl(locale, "/changelog/") },
+      ],
+    },
+  ]}
+>
+  <SiteHeader locale={locale} path={pagePath(page)} stars={stars} section="changelog" />
+  <main>
+    <div class="mx-auto flex w-full max-w-[900px] flex-col gap-10 px-4 py-12">
+      <header>
+        <h1 class="text-3xl font-semibold tracking-tight text-fd-foreground">{t.heading}</h1>
+        <p class="mt-2 text-sm text-fd-muted-foreground">{t.notesNote}</p>
+      </header>
+      {
+        entries.length === 0 ? (
+          <section
+            class="rounded-xl border border-fd-border bg-fd-card p-6"
+            data-testid="changelog-empty"
+          >
+            <h2 class="text-lg font-semibold text-fd-foreground">{t.empty}</h2>
+            <p class="mt-2 text-sm leading-6 text-fd-muted-foreground">{t.emptyText}</p>
+          </section>
+        ) : (
+          <ChangelogTimeline entries={entries} labels={labels} />
+        )
+      }
+      <ChangelogPagination
+        newer={page > 1 ? url(page - 1) : undefined}
+        older={page < total ? url(page + 1) : undefined}
+        labels={labels}
+      />
+    </div>
+  </main>
+</Layout>
