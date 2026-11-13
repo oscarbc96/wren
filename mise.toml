@@ -50,6 +50,20 @@ run = "bun test tests/repo"
 description = "Check a PR body against the template: lint:pr-body -- --body-file <file> --title <title> [--base <sha>]"
 run = "bun scripts/pr-body.ts"
 
+[tasks."perf:ram"]
+description = "Run the RAM benchmark (pass args after --)"
+run = "cargo run -p parity -- ram {{args}}"
+
+[tasks."parity:wpt"]
+description = "Check out WPT at a pinned SHA, run it for servo and chrome, and diff"
+run = [
+  "mkdir -p target/wpt",
+  "git -C target/wpt rev-parse HEAD 2>/dev/null || git clone --filter=blob:none https://github.com/web-platform-tests/wpt target/wpt",
+  "git -C target/wpt fetch --depth=1 origin 42a198aaaf3fa15c17dc25bff625654bec3390c3",
+  "git -C target/wpt checkout 42a198aaaf3fa15c17dc25bff625654bec3390c3",
+  "echo 'WPT checkout ready; run servoshell/chrome manually, then: cargo run -p parity -- wpt-diff <servo.json> <chrome.json> --out docs/research/parity-wpt.md'",
+]
+
 [tasks.lint]
 description = "Run every hk check on all files"
 run = "hk check --all"
