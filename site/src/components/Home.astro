@@ -1,0 +1,100 @@
+---
+import Layout from "@/layouts/Layout.astro";
+import SiteHeader from "@/components/SiteHeader.astro";
+import { absoluteUrl, repoUrl, siteName } from "@/lib/seo";
+import { getStars } from "@/lib/github";
+import { getUi, localePath } from "@/i18n";
+
+interface Props {
+  locale: string;
+}
+
+const { locale } = Astro.props;
+const ui = getUi(locale);
+const stars = await getStars();
+const t = ui.home;
+const repo = repoUrl;
+const designUrl = "https://github.com/oscarbc96/wren/blob/main/docs/superpowers/specs/2026-11-13-wren-browser-design.md";
+const button =
+  "inline-flex items-center justify-center rounded-lg px-5 py-2.5 text-sm font-medium transition-colors no-underline";
+---
+
+<Layout
+  title={t.title}
+  description={t.description}
+  locale={locale}
+  path="/"
+  ogKey="home"
+  jsonLd={[
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: siteName,
+      url: absoluteUrl(locale, "/"),
+      inLanguage: locale,
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      name: siteName,
+      description: t.description,
+      url: absoluteUrl(locale, "/"),
+      inLanguage: locale,
+      applicationCategory: "WebApplication",
+      operatingSystem: "macOS",
+      license: "https://www.gnu.org/licenses/agpl-3.0.html",
+      codeRepository: repoUrl,
+      isAccessibleForFree: true,
+      offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+    },
+  ]}
+>
+  <SiteHeader locale={locale} path="/" stars={stars} section="home" />
+  <main>
+    <div class="border-b border-fd-border bg-fd-muted px-4 py-3">
+      <p class="mx-auto max-w-5xl text-sm font-medium text-fd-foreground">{t.kicker}</p>
+    </div>
+
+    <div class="mx-auto w-full max-w-5xl px-4 sm:px-6">
+      <section class="py-16 sm:py-24" aria-labelledby="hero-title">
+        <h1
+          id="hero-title"
+          class="wren-wordmark text-5xl leading-none text-fd-foreground sm:text-7xl"
+        >
+          {t.heading}
+        </h1>
+        <p class="mt-5 max-w-2xl text-base leading-7 text-fd-muted-foreground">
+          {t.lede}
+        </p>
+        <div class="mt-8 flex flex-wrap gap-3">
+          <a
+            class={`${button} border border-fd-border bg-fd-card text-fd-foreground hover:bg-fd-muted`}
+            href={repo}>{t.sourceButton}{stars && <span class="ml-2 text-xs text-fd-muted-foreground" aria-label={ui.starsLabel.replace("{count}", stars)}>★ {stars}</span>}</a
+          >
+          <a
+            class={`${button} bg-fd-primary text-fd-primary-foreground hover:opacity-90`}
+            href={designUrl}>{t.designButton}</a
+          >
+          <a
+            class={`${button} border border-fd-border bg-fd-background text-fd-foreground hover:bg-fd-muted`}
+            href={localePath(locale, "/docs/roadmap/")}>{t.docsButton}</a
+          >
+        </div>
+      </section>
+
+      <section
+        class="grid gap-4 pb-16 sm:grid-cols-2 lg:grid-cols-2"
+        aria-label={t.featuresLabel}
+      >
+        {
+          t.features.map((feature) => (
+            <article class="rounded-xl border border-fd-border bg-fd-card p-5">
+              <h2 class="text-base font-semibold text-fd-foreground">{feature.title}</h2>
+              <p class="mt-2 text-sm leading-6 text-fd-muted-foreground">{feature.text}</p>
+            </article>
+          ))
+        }
+      </section>
+    </div>
+  </main>
+</Layout>

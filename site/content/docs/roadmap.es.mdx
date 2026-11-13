@@ -1,0 +1,54 @@
+---
+title: Hoja de ruta
+description: Hitos de M0 a M7 y la alfa pública, en lenguaje sencillo.
+---
+
+Wren se entrega hito a hito. Cada uno termina con algo usable y medido.
+
+## M0: Carcasa
+
+Ventana, pestañas, omnibox, historial, marcadores, Servo integrado,
+recuperación ante fallos. Punto de referencia de RAM y arnés de pruebas de la
+plataforma web en CI. Esqueleto del sitio de documentación.
+
+## M1: Navegador del día a día
+
+Pestañas que duermen y se congelan, bloqueo de anuncios, contraseñas en el
+Llavero de macOS más importación desde Chrome, descargas, "Abrir en Chrome",
+arnés de sitios principales, DevTools a través de la depuración remota ya
+existente de Servo. Las compilaciones se firman de forma ad-hoc para uso
+local.
+
+## M2: Chrome DevTools
+
+Servidor CDP, interfaz de Chrome DevTools incluida, soporte para Playwright y
+Puppeteer.
+
+## M3: Núcleo de extensiones
+
+Instalación desde la Chrome Web Store, scripts de contenido, API `chrome.*`
+principal, arnés de extensiones. 1Password, Bitwarden, uBlock Origin Lite y
+Dark Reader.
+
+## M4: Núcleo de IA
+
+Proveedores, barra lateral de IA, agente con reglas de seguridad, MCP,
+WebMCP.
+
+## M5: Páginas generadas
+
+Proveedores de búsqueda, lector, canalización OpenUI, fijar y actualizar.
+
+## M6: Rutinas
+
+Detección, recetas, programador, confirmaciones, agente en la barra de menús.
+
+## M7: Complementos
+
+Complementos en WebAssembly.
+
+## Alfa pública
+
+Compilación para macOS firmada y notarizada, actualización automática,
+documentación, panel público de paridad, passkeys. Necesita una cuenta de
+desarrollador de Apple.

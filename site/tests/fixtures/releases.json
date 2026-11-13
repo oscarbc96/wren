@@ -1,0 +1,18 @@
+[
+  {
+    "id": "v0.2.0-rc.1",
+    "title": "Wren 0.2.0 release candidate",
+    "date": "2031-02-14T10:00:00Z",
+    "url": "https://github.com/example/wren-fixture/releases/tag/v0.2.0-rc.1",
+    "content": "Fixture pre-release notes: **candidate** build.",
+    "prerelease": true
+  },
+  {
+    "id": "v0.1.0",
+    "title": "Wren 0.1.0",
+    "date": "2031-01-05T09:00:00Z",
+    "url": "https://github.com/example/wren-fixture/releases/tag/v0.1.0",
+    "content": "Fixture stable notes:\n\n- first fixture change\n- second fixture change",
+    "prerelease": false
+  }
+]

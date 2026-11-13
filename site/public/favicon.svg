@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Wren">
+  <rect width="64" height="64" rx="14" fill="#1f2a2e" />
+  <ellipse cx="30" cy="34" rx="14" ry="11" fill="#e8a87c" />
+  <circle cx="44" cy="26" r="8" fill="#e8a87c" />
+  <path d="M50 26 L58 24 L50 28 Z" fill="#f5efe6" />
+  <path d="M16 34 L6 28 L6 40 Z" fill="#e8a87c" />
+  <circle cx="46" cy="24" r="1.5" fill="#1f2a2e" />
+</svg>

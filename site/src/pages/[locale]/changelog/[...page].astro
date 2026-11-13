@@ -1,0 +1,24 @@
+---
+import type { GetStaticPaths } from "astro";
+import ChangelogRoute from "@/components/ChangelogRoute.astro";
+import { nonDefaultLocales } from "@/i18n";
+import { getReleasePages } from "@/lib/github";
+
+export const prerender = true;
+
+export const getStaticPaths = (async () => {
+  const pages = await getReleasePages();
+  const total = Math.max(pages.length, 1);
+  return nonDefaultLocales.flatMap((locale) =>
+    Array.from({ length: total }, (_, i) => ({
+      params: { locale, page: i === 0 ? undefined : String(i + 1) },
+      props: { page: i + 1, total, entries: pages[i] ?? [] },
+    })),
+  );
+}) satisfies GetStaticPaths;
+
+const { locale } = Astro.params;
+const { page, total, entries } = Astro.props;
+---
+
+<ChangelogRoute locale={locale} page={page} total={total} entries={entries} />

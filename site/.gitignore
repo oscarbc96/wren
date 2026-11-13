@@ -1,0 +1,7 @@
+node_modules/
+dist/
+dist-tests/
+.astro/
+.linkinator/
+.turbo/
+public/settings.schema.json
