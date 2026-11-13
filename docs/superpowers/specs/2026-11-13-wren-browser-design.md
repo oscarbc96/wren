@@ -260,11 +260,24 @@ The low-RAM claim is mostly won here:
   are never slept.
 - Ad and tracker blocking built in with Brave's Rust `adblock` crate
   (fewer bytes and scripts loaded is the cheapest RAM saving).
-- Process model: one content process for now, with crash recovery that
-  restores tabs. **Owner decision**: dogfooding and the public alpha ship
-  single-process as a test, with the isolation risk stated in the release
-  notes. Move to Servo's multiprocess mode when it is stable; nothing
-  waits for it.
+- Process model: **one content process per tab** (owner decision,
+  2026-11-13), so a tab that hangs or crashes can be killed and reloaded
+  without touching the others. Wren runs Servo in multiprocess mode: Servo
+  keys event loops by browsing context group and site, and every tab Wren
+  opens is its own group, so each tab gets its own process (cross-site
+  iframes may add more; popups opened with an opener share the opener's
+  tab process, as in Chrome). The `wren` binary doubles as the content
+  process (`servo::run_content_process` on a hidden flag).
+- Process control: a task manager (`cmd-alt-esc`, also `wren://processes`)
+  lists every process with its tab, RSS and CPU, and has End process.
+  Killing a tab process shows that tab's crash notice with Reload; other
+  tabs are untouched. A hang watchdog flags a tab whose script thread has
+  not answered for 5 s (Servo's background hang monitor) and offers Wait /
+  End process in the tab.
+- RAM cost: each content process costs a fixed overhead. Sleeping tabs
+  (above) exit their process, so idle tabs cost no process. Measure the
+  per-process overhead in M0 and keep the 20-tab target; if it is missed,
+  fall back to one process per site, not to a single process.
 
 ### 7.3 Parity harness (`parity`)
 
@@ -459,8 +472,10 @@ Rules:
 Each ends with something usable and measured.
 
 1. **M0 Shell**: window, tabs, omnibox, history, bookmarks, embedded Servo,
-   crash recovery. RAM benchmark and WPT harness running in CI.
-2. **M1 Daily driver**: tab sleep/freeze, adblock, built-in Keychain
+   one content process per tab (Servo multiprocess) with crash recovery.
+   RAM benchmark and WPT harness running in CI.
+2. **M1 Daily driver**: task manager with End process and the hang
+   watchdog, tab sleep/freeze, adblock, built-in Keychain
    passwords + Chrome import, downloads, "Open in Chrome", top-sites
    harness, DevTools via Servo's existing Firefox remote-debugging support.
    **Owner's must-work list (exit gate)**: Google Calendar, Google Meet,
@@ -528,8 +543,8 @@ plus self-hosted SearXNG is the documented free path.
 ## 13. Decided vs left to the builder
 
 Decided by the owner after review: Servo patch queue allowed, features do
-not wait for upstream; single-process is acceptable for dogfood and alpha
-(treated as a test); M1 must-work list is Google Calendar, Meet, Slack and
+not wait for upstream; one content process per tab from M0 (2026-11-13,
+replacing the earlier single-process decision); M1 must-work list is Google Calendar, Meet, Slack and
 DevTools; no Apple organization account exists.
 
 Build setup (Claude's call): planned in detail for M0 and M1, later
