@@ -1,1 +1,25 @@
-[]
+[
+  {
+    "bindings": {
+      "cmd-t": "tab::New",
+      "cmd-w": "tab::Close",
+      "cmd-shift-t": "tab::Reopen",
+      "cmd-l": "omnibox::Focus",
+      "cmd-r": "nav::Reload",
+      "cmd-[": "nav::Back",
+      "cmd-]": "nav::Forward",
+      "cmd-d": "bookmark::Toggle",
+      "cmd-1": "tab::Select1",
+      "cmd-2": "tab::Select2",
+      "cmd-3": "tab::Select3",
+      "cmd-4": "tab::Select4",
+      "cmd-5": "tab::Select5",
+      "cmd-6": "tab::Select6",
+      "cmd-7": "tab::Select7",
+      "cmd-8": "tab::Select8",
+      "cmd-9": "tab::Select9",
+      "cmd-shift-[": "tab::Prev",
+      "cmd-shift-]": "tab::Next"
+    }
+  }
+]
