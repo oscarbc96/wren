@@ -58,7 +58,12 @@ if (config) {
         (u) => u["package-ecosystem"] === "cargo",
       );
       const names = cargo?.ignore?.map((i) => i["dependency-name"]) ?? [];
-      for (const n of ["gpui-ce", "gpui_ce_platform", "gpui_ce_elements", "servo"]) {
+      for (const n of [
+        "gpui-ce",
+        "gpui_ce_platform",
+        "gpui_ce_elements",
+        "servo",
+      ]) {
         expect(names).toContain(n);
       }
     });
