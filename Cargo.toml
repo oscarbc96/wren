@@ -47,3 +47,4 @@ debug = false
 
 [patch.crates-io]
 zed-font-kit = { path = "vendor/zed-font-kit" }
+stylo_derive = { path = "vendor/stylo_derive" }

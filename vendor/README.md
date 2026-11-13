@@ -1,7 +1,14 @@
 # Vendored dependencies
 
-`zed-font-kit` is vendored (copied from the crates.io registry) because its
-`freetype-sys` dependency pin conflicts with Servo's transitive graph when
-left to resolve from crates.io; patching the version to `0.23` (the code path
-is compiled out on macOS) and pointing at this local copy lets the workspace
-build. Only `zed-font-kit` is vendored; its LICENSE files are retained.
+Each crate here is a copy of the crates.io release with a minimal patch,
+wired in through `[patch.crates-io]` in the root `Cargo.toml`. LICENSE files
+are kept. Drop a copy once upstream ships the fix.
+
+- `zed-font-kit`: its non-macOS `freetype-sys` pin is raised to `0.23` so
+  it does not clash with Servo's `freetype-sys` (`links = "freetype"`). The
+  code path is compiled out on macOS.
+- `stylo_derive` 0.23.0: the `ToCss` derive emitted bare `Ok(())` values
+  that were then used with `?`. GPUI-CE turns on `log`'s `kv` features,
+  which add another `From<_> for fmt::Error` impl, so rustc can no longer
+  infer the error type (E0282). The patch writes
+  `Ok::<(), std::fmt::Error>(())` in `to_css.rs`.
