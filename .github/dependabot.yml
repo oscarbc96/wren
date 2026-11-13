@@ -72,3 +72,7 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # astro check does not support TypeScript 7 yet; lift this when it does.
+      - dependency-name: typescript
+        versions: [">=7"]
