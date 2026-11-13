@@ -1,4 +1,7 @@
-use engine::{Engine, EngineEvent, FakeCall, FakeEngine, LoadState, WebViewId};
+use engine::{
+    Engine, EngineEvent, EngineInput, FakeCall, FakeEngine, LoadState, Modifiers, MouseButton,
+    WebViewId,
+};
 use url::Url;
 
 #[test]
@@ -42,4 +45,29 @@ fn calls_are_recorded() {
     assert!(calls.iter().any(|c| matches!(c, FakeCall::Load { .. })));
     assert!(calls.iter().any(|c| matches!(c, FakeCall::Back { .. })));
     assert!(calls.iter().any(|c| matches!(c, FakeCall::Reload { .. })));
+}
+
+#[test]
+fn fake_records_input() {
+    let mut e = FakeEngine::default();
+    let id = WebViewId(7);
+    let ev = EngineInput::MouseDown {
+        button: MouseButton::Left,
+        x: 10.0,
+        y: 20.0,
+    };
+    e.input(id, ev.clone());
+    assert_eq!(e.calls(), &[FakeCall::Input(id, ev)]);
+
+    let ev = EngineInput::Key {
+        down: true,
+        key: "a".to_string(),
+        code: "KeyA".to_string(),
+        modifiers: Modifiers::default(),
+    };
+    e.input(id, ev.clone());
+    assert!(matches!(
+        e.calls().last(),
+        Some(FakeCall::Input(_, EngineInput::Key { .. }))
+    ));
 }
