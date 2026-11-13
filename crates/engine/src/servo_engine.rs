@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use dpi::PhysicalSize;
 use objc2::rc::Retained;
 use objc2::{MainThreadMarker, MainThreadOnly, Message};
-use objc2_app_kit::{NSAutoresizingMaskOptions, NSView};
+use objc2_app_kit::NSView;
 use objc2_foundation::{NSPoint, NSRect, NSSize};
 use raw_window_handle::{
     AppKitDisplayHandle, AppKitWindowHandle, RawDisplayHandle, RawWindowHandle,
