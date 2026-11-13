@@ -8,12 +8,13 @@ and measured.
 
 ## M0: Shell
 
-Window, tabs, omnibox, history, bookmarks, embedded Servo, crash recovery. RAM
-benchmark and web-platform-tests harness running in CI. Docs site skeleton.
+Window, tabs, omnibox, history, bookmarks, embedded Servo with one process
+per tab, crash recovery. RAM benchmark and web-platform-tests harness running in CI. Docs site skeleton.
 
 ## M1: Daily driver
 
-Tab sleep and freeze, ad blocking, passwords in the macOS Keychain plus Chrome
+A task manager to end any tab's process, a hang watchdog, tab sleep and
+freeze, ad blocking, passwords in the macOS Keychain plus Chrome
 import, downloads, "Open in Chrome", top-sites harness, DevTools through
 Servo's existing remote debugging. Builds are ad-hoc signed for local use.
 
