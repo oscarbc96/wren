@@ -1,7 +1,7 @@
 # Terms of use
 
-1. **Licence.** Wren is free software under the GNU Affero General Public
-   License, version 3 or later (see LICENSE). These terms add no restrictions to
+1. **Licence.** Wren is free software under the Mozilla Public License,
+   version 2.0 (see LICENSE). These terms add no restrictions to
    that licence.
 2. **No warranty.** Wren is provided "as is", without warranty of any kind. You
    use it at your own risk.

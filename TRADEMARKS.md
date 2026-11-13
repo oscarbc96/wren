@@ -2,7 +2,7 @@
 
 Wren is an independent, community-built, open-source browser. "Wren" and the
 Wren logo (once it exists) identify this project. The source is open under the
-AGPL, so you may fork and redistribute it, but a modified build must not
+MPL-2.0, so you may fork and redistribute it, but a modified build must not
 present itself as the official Wren release: pick another name and icon, and
 keep this notice wherever you describe the app. Accurate statements such as
 "based on Wren" or "compatible with Wren" are fine.

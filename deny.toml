@@ -33,7 +33,6 @@ allow = [
   # libtomcrypt inside sqlcipher-src (bundled SQLCipher).
   "WTFPL",
   # Wren itself (and the template code it reuses).
-  "AGPL-3.0-or-later",
 ]
 
 [bans]

@@ -5,7 +5,7 @@ members = ["crates/*"]
 [workspace.package]
 version = "0.0.0"
 edition = "2024"
-license = "AGPL-3.0-or-later"
+license = "MPL-2.0"
 
 # GPUI and reused Zed crates share one Zed git rev (spec section 3, Dependencies).
 [workspace.dependencies]
