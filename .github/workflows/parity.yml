@@ -40,18 +40,19 @@ jobs:
           cache-on-failure: true
       - name: Checkout WPT
         run: |
-          git clone --filter=blob:none https://github.com/web-platform-tests/wpt target/wpt
-          git -C target/wpt fetch --depth=1 origin 42a198aaaf3fa15c17dc25bff625654bec3390c3
-          git -C target/wpt checkout 42a198aaaf3fa15c17dc25bff625654bec3390c3
+          git init -q target/wpt
+          git -C target/wpt fetch -q --depth=1 https://github.com/web-platform-tests/wpt 42a198aaaf3fa15c17dc25bff625654bec3390c3
+          git -C target/wpt checkout -q FETCH_HEAD
       - name: Run WPT for servo
         env:
-          SERVOSHELL_BIN: ${{ env.SERVOSHELL_BIN }}
+          SERVOSHELL_BIN: ${{ vars.SERVOSHELL_BIN }}
         run: |
-          ./target/wpt/wpt run --log-wptreport=servo.json ${SERVOSHELL_BIN} $(cat crates/parity/wpt-include.txt | tr '\n' ' ') || true
+          dirs=(); while IFS= read -r d; do [ -n "$d" ] && dirs+=("$d"); done < crates/parity/wpt-include.txt
+          ./target/wpt/wpt run --log-wptreport=servo.json --binary="${SERVOSHELL_BIN:?set the SERVOSHELL_BIN repo variable}" servo "${dirs[@]}" || true
       - name: Run WPT for chrome
         run: |
-          /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --version
-          ./target/wpt/wpt run --log-wptreport=chrome.json chrome $(cat crates/parity/wpt-include.txt | tr '\n' ' ') || true
+          dirs=(); while IFS= read -r d; do [ -n "$d" ] && dirs+=("$d"); done < crates/parity/wpt-include.txt
+          ./target/wpt/wpt run --log-wptreport=chrome.json chrome "${dirs[@]}" || true
       - name: Diff
         run: |
           cargo run -p parity -- wpt-diff servo.json chrome.json --out parity-diff.md
