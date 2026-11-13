@@ -1,0 +1,12 @@
+---
+import type { GetStaticPaths } from "astro";
+import DownloadsRoute from "@/components/DownloadsRoute.astro";
+import { nonDefaultLocales } from "@/i18n";
+
+export const getStaticPaths = (() =>
+  nonDefaultLocales.map((locale) => ({ params: { locale } }))) satisfies GetStaticPaths;
+
+const { locale } = Astro.params;
+---
+
+<DownloadsRoute locale={locale} />

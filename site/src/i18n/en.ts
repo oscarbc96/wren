@@ -5,7 +5,7 @@ export const en: Ui = {
     main: "Main",
     docs: "Docs",
     changelog: "Changelog",
-    download: "Download",
+    download: "Downloads",
     github: "GitHub",
   },
   footer: {
@@ -63,9 +63,32 @@ export const en: Ui = {
     emptyText:
       "Nothing has been published yet. Releases will appear here as soon as the first one ships.",
     prerelease: "Pre-release",
+    pending: "Pending release",
+    unreleased: "Unreleased",
+    viewPr: "View the release pull request",
     newer: "Newer",
     older: "Older",
     dateLocale: "en-US",
+  },
+  downloads: {
+    title: "Downloads | Wren",
+    description:
+      "Wren is pre-alpha and has no builds yet. Build it from source, or watch GitHub Releases for the first build.",
+    heading: "Downloads",
+    lede: "Wren is pre-alpha and in design. There are no builds to download yet.",
+    status: "Pre-alpha",
+    platformTitle: "macOS 14+ on Apple Silicon",
+    platformText:
+      "The first builds will target macOS 14 or later on Apple Silicon (M1 and newer). Other platforms are not planned yet.",
+    soonButton: "Coming soon",
+    buildTitle: "Build from source",
+    buildText:
+      "You can build and run the current shell yourself with the Rust toolchain.",
+    buildLink: "Build from source",
+    releasesTitle: "GitHub Releases",
+    releasesText:
+      "Builds will be published on GitHub Releases as soon as there is one to try.",
+    releasesLink: "Open GitHub Releases",
   },
   notFound: {
     title: "Page not found | Wren",

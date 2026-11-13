@@ -37,10 +37,29 @@ export interface Ui {
     empty: string;
     emptyText: string;
     prerelease: string;
+    pending: string;
+    unreleased: string;
+    viewPr: string;
     newer: string;
     older: string;
     /** BCP 47 tag used to format dates. */
     dateLocale: string;
+  };
+  downloads: {
+    title: string;
+    description: string;
+    heading: string;
+    lede: string;
+    status: string;
+    platformTitle: string;
+    platformText: string;
+    soonButton: string;
+    buildTitle: string;
+    buildText: string;
+    buildLink: string;
+    releasesTitle: string;
+    releasesText: string;
+    releasesLink: string;
   };
   notFound: {
     title: string;

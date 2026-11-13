@@ -2,7 +2,7 @@
 import Layout from "@/layouts/Layout.astro";
 import SiteHeader from "@/components/SiteHeader.astro";
 import { absoluteUrl, siteName } from "@/lib/seo";
-import { ChangelogPagination, ChangelogTimeline } from "@/components/changelog";
+import { ChangelogPagination, ChangelogTimeline, PendingRelease } from "@/components/changelog";
 import { getUi, localePath } from "@/i18n";
 import { getStars } from "@/lib/github";
 import type { GitHubChangelogEntry } from "@fumadocs/changelog/github";
@@ -14,14 +14,20 @@ interface Props {
   /** Total number of pages (at least 1). */
   total: number;
   entries: GitHubChangelogEntry[];
+  /** Unmerged release-please PR, shown on the first page only. */
+  pending?: { version: string; url: string; content: string };
 }
 
-const { locale, page, total, entries } = Astro.props;
+const { locale, page, total, entries, pending } = Astro.props;
+const shownPending = page === 1 ? pending : undefined;
 const t = getUi(locale).changelog;
 const stars = await getStars();
 const labels = {
   dateLocale: t.dateLocale,
   prerelease: t.prerelease,
+  pending: t.pending,
+  unreleased: t.unreleased,
+  viewPr: t.viewPr,
   newer: t.newer,
   older: t.older,
 };
@@ -54,8 +60,9 @@ const url = (n: number) => localePath(locale, pagePath(n));
         <h1 class="text-3xl font-semibold tracking-tight text-fd-foreground">{t.heading}</h1>
         <p class="mt-2 text-sm text-fd-muted-foreground">{t.notesNote}</p>
       </header>
+      {shownPending && <PendingRelease entry={shownPending} labels={labels} />}
       {
-        entries.length === 0 ? (
+        entries.length === 0 && !shownPending ? (
           <section
             class="rounded-xl border border-fd-border bg-fd-card p-6"
             data-testid="changelog-empty"
@@ -64,7 +71,7 @@ const url = (n: number) => localePath(locale, pagePath(n));
             <p class="mt-2 text-sm leading-6 text-fd-muted-foreground">{t.emptyText}</p>
           </section>
         ) : (
-          <ChangelogTimeline entries={entries} labels={labels} />
+          entries.length > 0 && <ChangelogTimeline entries={entries} labels={labels} />
         )
       }
       <ChangelogPagination

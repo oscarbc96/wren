@@ -5,7 +5,7 @@ export const es: Ui = {
     main: "Principal",
     docs: "Documentación",
     changelog: "Novedades",
-    download: "Descargar",
+    download: "Descargas",
     github: "GitHub",
   },
   footer: {
@@ -64,9 +64,32 @@ export const es: Ui = {
     emptyText:
       "Aún no se ha publicado nada. Las versiones aparecerán aquí en cuanto salga la primera.",
     prerelease: "Versión preliminar",
+    pending: "Próxima versión",
+    unreleased: "Sin publicar",
+    viewPr: "Ver la pull request de la versión",
     newer: "Más recientes",
     older: "Anteriores",
     dateLocale: "es-ES",
+  },
+  downloads: {
+    title: "Descargas | Wren",
+    description:
+      "Wren está en pre-alfa y aún no tiene compilaciones. Compílalo desde el código o sigue las versiones de GitHub para la primera compilación.",
+    heading: "Descargas",
+    lede: "Wren está en pre-alfa y en diseño. Todavía no hay compilaciones que descargar.",
+    status: "Pre-alfa",
+    platformTitle: "macOS 14+ en Apple Silicon",
+    platformText:
+      "Las primeras compilaciones serán para macOS 14 o posterior en Apple Silicon (M1 y posteriores). Aún no hay otras plataformas previstas.",
+    soonButton: "Próximamente",
+    buildTitle: "Compilar desde el código",
+    buildText:
+      "Puedes compilar y ejecutar la shell actual tú mismo con la cadena de herramientas de Rust.",
+    buildLink: "Compilar desde el código",
+    releasesTitle: "Versiones en GitHub",
+    releasesText:
+      "Las compilaciones se publicarán en las versiones de GitHub en cuanto haya una que probar.",
+    releasesLink: "Abrir las versiones de GitHub",
   },
   notFound: {
     title: "Página no encontrada | Wren",

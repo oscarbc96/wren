@@ -320,6 +320,65 @@ Roadmap: `docs/superpowers/plans/2026-11-13-roadmap.md`.
   the report; run the must-work list with the owner's profile.
 - [ ] **Step 5: Commit** `feat(parity): top-sites harness and must-work smoke tests`
 
+### Task 10: Memory diet
+
+Baseline (M0, tabs10, release): `phys_footprint` Wren 830 MB vs Chrome
+815 MB; browser process 223 MB RSS, tab processes 56 to 174 MB each.
+Spec 11 target: at most 50% of Chrome. Order: measure, then the levers
+with the biggest saving. Runs after Task 2 (sleep) and Task 3 (adblock).
+
+**Files:**
+- Modify: `crates/engine/src/{api.rs,servo_engine.rs}`, `crates/wren/src/{app.rs,window.rs}`,
+  `crates/parity/src/ram.rs`, `crates/settings` defaults
+- Create: `docs/research/2026-11-xx-memory-diet.md`
+- Test: `crates/engine/tests/memory.rs`, `crates/parity/tests/ram.rs`
+
+**Interfaces:**
+- Engine: `Engine::memory_report(&mut self) -> Vec<MemoryRow>` with
+  `pub struct MemoryRow { pub process: Option<WebViewId>, pub path: String, pub bytes: u64 }`
+  (from `Servo::create_memory_report`); `Engine::minimize_memory(&mut self)`
+  (forces a GC in every content process and purges image and font
+  caches, as far as Servo 0.8 allows).
+- `parity ram` reports the sum of `phys_footprint` over every process of
+  the profile (not RSS of the root's tree), plus RSS for reference.
+- Settings: `memory.js_jit = true`, `memory.js_gc_profile = "low"`
+  (`"default" | "low"`), `memory.pressure_response = true`.
+
+- [ ] **Step 1: Measure.** Fix `parity ram` (footprint over all profile
+  processes, Chrome included; test `footprint_sums_all_profile_processes`
+  with a fake process table). Add `memory_report` output to `--harness`.
+  Record the per-process breakdown for tabs10 (JS heap, layout, fonts,
+  images, WebRender, binary and system libraries) in the research doc.
+  This decides the order of steps 2 to 5.
+- [ ] **Step 2: SpiderMonkey profile.** `memory.js_gc_profile = "low"`
+  sets Servo's `js_mem_gc_*` preferences for smaller heaps and earlier
+  collection (compacting on, lower `high_frequency_*_limit_mb`, smaller
+  heap growth, empty chunk counts 0). Servo applies these to all tabs at
+  launch. Measure tabs10 with `default`, `low`, and `low` +
+  `memory.js_jit = false`; keep the best default that does not slow the
+  top-sites harness load time by more than 10%.
+- [ ] **Step 3: Memory pressure.** Subscribe to macOS memory pressure
+  (`DISPATCH_SOURCE_TYPE_MEMORYPRESSURE`): on warn, `minimize_memory` and
+  sleep the oldest background tab; on critical, sleep every background
+  tab that may sleep (Task 2 rules). Test
+  `pressure_warn_minimizes_then_sleeps` with a fake pressure source and
+  FakeEngine.
+- [ ] **Step 4: Background GC.** When a tab goes to the background, run a
+  GC for that tab after 30 s if Servo 0.8 allows a per-webview GC;
+  otherwise skip and note it (a Servo patch can add it later).
+- [ ] **Step 5: Allocator and content process start.** Check which
+  allocator Servo's content process uses; if jemalloc, set
+  `dirty_decay_ms` and `muzzy_decay_ms` low for content processes.
+  Measure a content process right after start with `about:blank`:
+  anything the `wren` binary initializes there besides Servo (GPUI,
+  settings, store) must not run in `--content-process` mode.
+- [ ] **Step 6: Process per site (only if still above target).** Behind
+  `tabs.process_model = "tab" | "site"` (default stays `tab`): tabs on the
+  same registrable domain share one content process. Measure both.
+- [ ] **Step 7: Measure and commit.** tabs10 and tabs20, footprint, before
+  and after each step, in `docs/research/perf/`. Commit
+  `perf: memory diet` with the table in the PR body.
+
 ### Task 9: App bundle and milestone exit
 
 **Files:**
@@ -330,8 +389,8 @@ Roadmap: `docs/superpowers/plans/2026-11-13-roadmap.md`.
   `target/Wren.app` (Info.plist with bundle id `io.github.oscarbc96.wren`,
   icon from `assets/`), `codesign -s - --deep`.
 - [ ] **Step 2:** RAM benchmark: Wren release vs Chrome, tabs10 and
-  tabs20, results under `docs/research/perf/`. No regression above 10%
-  against M0.
+  tabs20 (footprint, after Task 10), results under `docs/research/perf/`.
+  No regression above 10% against M0; report the gap to the 50% target.
 - [ ] **Step 3:** Must-work exit: Calendar, Slack and DevTools usable in
   Wren; Meet usable in Wren or routed to Chrome by rule.
 - [ ] **Step 4: Commit** `chore: m1 exit, bundle and measurements`

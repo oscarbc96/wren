@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "fumadocs-ui/css/neutral.css";
 @import "fumadocs-ui/css/preset.css";
+@import "./nav-bird.css";
 
 /*
  * Self-hosted variable fonts, Latin and Latin Extended only (every site
@@ -83,29 +84,91 @@
         "SF Mono", Menlo, Consolas, monospace;
 }
 
-/* One accent: a cool teal. Everything else stays on the neutral preset. */
+/*
+ * Brand palette from assets/brand/wren-icon.svg: deep teal, coral and a warm
+ * white (light) or navy (dark) ground. Teal is the one interactive accent;
+ * coral stays a small highlight (--wren-coral). Every --color-fd-* token the
+ * Fumadocs neutral preset defines is overridden so docs match the landing page.
+ * Contrast (WCAG): light foreground on background 15.9:1, muted text 6.2:1,
+ * white on primary 5.5:1; dark foreground 15.2:1, muted text 7.3:1, navy on
+ * primary 10.2:1.
+ */
 :root {
-    --color-fd-background: hsl(0, 0%, 100%);
-    --color-fd-card: hsl(200, 20%, 98%);
-    --color-fd-muted: hsl(200, 18%, 96%);
-    --color-fd-border: hsl(200, 15%, 90%);
-    --color-fd-primary: hsl(184, 90%, 26%);
-    --color-fd-primary-foreground: hsl(0, 0%, 100%);
-    --color-fd-ring: hsl(184, 70%, 38%);
+    --wren-teal: #0e7480;
+    --wren-coral: #c2413d;
+    --color-fd-background: #ffffff;
+    --color-fd-foreground: #1b2233;
+    --color-fd-muted: #f2f5f7;
+    --color-fd-muted-foreground: #566275;
+    --color-fd-popover: #ffffff;
+    --color-fd-popover-foreground: #2a3347;
+    --color-fd-card: #f7f9fa;
+    --color-fd-card-foreground: #1b2233;
+    --color-fd-border: #e4e9ec;
+    --color-fd-primary: #0e7480;
+    --color-fd-primary-foreground: #ffffff;
+    --color-fd-secondary: #eef2f4;
+    --color-fd-secondary-foreground: #1b2233;
+    --color-fd-accent: #d9f0ee;
+    --color-fd-accent-foreground: #0e7480;
+    --color-fd-ring: #1592a5;
+    --color-fd-overlay: hsla(222, 40%, 12%, 0.25);
 }
 
 .dark {
-    --color-fd-background: hsl(210, 14%, 6%);
-    --color-fd-card: hsl(210, 12%, 9%);
-    --color-fd-muted: hsl(210, 10%, 12%);
-    --color-fd-border: hsl(210, 8%, 18%);
-    --color-fd-primary: hsl(184, 75%, 55%);
-    --color-fd-primary-foreground: hsl(210, 14%, 6%);
-    --color-fd-ring: hsl(184, 70%, 50%);
+    --wren-teal: #4fd8d0;
+    --wren-coral: #ff7672;
+    --color-fd-background: #10172a;
+    --color-fd-foreground: #e8edf5;
+    --color-fd-muted: #1a2340;
+    --color-fd-muted-foreground: #9aa6bd;
+    --color-fd-popover: #161e36;
+    --color-fd-popover-foreground: #d3dbe8;
+    --color-fd-card: #151d33;
+    --color-fd-card-foreground: #e8edf5;
+    --color-fd-border: #26304d;
+    --color-fd-primary: #4fd8d0;
+    --color-fd-primary-foreground: #10172a;
+    --color-fd-secondary: #1c2646;
+    --color-fd-secondary-foreground: #e8edf5;
+    --color-fd-accent: rgba(79, 216, 208, 0.14);
+    --color-fd-accent-foreground: #4fd8d0;
+    --color-fd-ring: #4ab9c0;
+    --color-fd-overlay: hsla(222, 45%, 4%, 0.55);
+}
+
+/* The neutral preset re-greys the dark sidebar; keep it on the navy. */
+.dark #nd-sidebar {
+    --color-fd-muted: #1a2340;
+    --color-fd-secondary: #1c2646;
+    --color-fd-muted-foreground: #9aa6bd;
+}
+
+/*
+ * One highlight for every menu, list and active item: the accent token, a
+ * teal tint (same hue as primary). Fumadocs paints
+ * the active sidebar link, the current popover item and the TOC marker with
+ * primary/10, which desaturates to grey-green, so those are pointed
+ * at the accent token.
+ * Contrast (WCAG): light #0e7480 on #d9f0ee 4.6:1 (on white 5.5:1);
+ * dark #4fd8d0 on the tint over navy #10172a 7.7:1, over popover #161e36 7.0:1.
+ */
+#nd-sidebar a[data-active="true"],
+[class~="bg-fd-primary/10"] {
+    background-color: var(--color-fd-accent);
+    color: var(--color-fd-accent-foreground);
+}
+#nd-toc a[data-active="true"] {
+    color: var(--color-fd-accent-foreground);
 }
 
 html {
     scroll-behavior: smooth;
+}
+
+/* Home only: the hero bird flies past the right edge when it departs. */
+html:has(.wren-bird) {
+    overflow-x: clip;
 }
 
 body {
