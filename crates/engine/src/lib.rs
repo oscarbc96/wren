@@ -6,4 +6,4 @@ mod servo_engine;
 
 pub use api::*;
 pub use fake::*;
-pub use servo_engine::{ServoEngine, content_process_main, content_process_token};
+pub use servo_engine::{ServoEngine, content_process_main, content_process_token, to_servo_input};

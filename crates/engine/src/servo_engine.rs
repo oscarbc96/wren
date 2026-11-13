@@ -1,21 +1,26 @@
 //! Servo-backed `Engine` implementation.
 
-use crate::api::{Engine, EngineEvent, LoadState, ViewRect, WebViewId};
+use crate::api::{
+    Engine, EngineEvent, EngineInput, LoadState, Modifiers, MouseButton, ViewRect, WebViewId,
+};
 use anyhow::{Context, Result};
 use dpi::PhysicalSize;
 use objc2::rc::Retained;
-use objc2::{MainThreadMarker, MainThreadOnly, Message};
+use objc2::{MainThreadMarker, MainThreadOnly, Message, define_class, msg_send};
 use objc2_app_kit::NSView;
-use objc2_foundation::{NSPoint, NSRect, NSSize};
+use objc2_foundation::{NSObjectProtocol, NSPoint, NSRect, NSSize};
 use raw_window_handle::{
     AppKitDisplayHandle, AppKitWindowHandle, RawDisplayHandle, RawWindowHandle,
 };
 use servo::{
-    CreateNewWebViewRequest, EventLoopWaker, LoadStatus, Opts, RenderingContext, Servo,
-    ServoBuilder, WebView, WebViewBuilder, WebViewDelegate, WindowRenderingContext,
+    CreateNewWebViewRequest, EventLoopWaker, InputEvent, LoadStatus, MouseButtonAction,
+    MouseButtonEvent, MouseLeftViewportEvent, MouseMoveEvent, Opts, RenderingContext, Servo,
+    ServoBuilder, WebView, WebViewBuilder, WebViewDelegate, WheelDelta, WheelEvent, WheelMode,
+    WindowRenderingContext,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::rc::Rc;
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use sysinfo::{Pid, ProcessesToUpdate, System};
@@ -52,6 +57,115 @@ pub fn content_process_main() -> Option<()> {
     });
     servo::run_content_process(token);
     Some(())
+}
+
+define_class!(
+    #[unsafe(super(NSView))]
+    #[thread_kind = MainThreadOnly]
+    #[name = "WrenContentView"]
+    struct WrenContentView;
+
+    unsafe impl NSObjectProtocol for WrenContentView {}
+
+    impl WrenContentView {
+        #[unsafe(method(hitTest:))]
+        fn hit_test(&self, _point: NSPoint) -> *mut NSView {
+            std::ptr::null_mut()
+        }
+
+        #[unsafe(method(acceptsFirstResponder))]
+        fn accepts_first_responder(&self) -> bool {
+            false
+        }
+    }
+);
+
+fn map_modifiers(m: &Modifiers) -> servo::Modifiers {
+    let mut out = servo::Modifiers::empty();
+    if m.shift {
+        out |= servo::Modifiers::SHIFT;
+    }
+    if m.ctrl {
+        out |= servo::Modifiers::CONTROL;
+    }
+    if m.alt {
+        out |= servo::Modifiers::ALT;
+    }
+    if m.cmd {
+        out |= servo::Modifiers::META;
+    }
+    out
+}
+
+fn map_button(button: MouseButton) -> servo::MouseButton {
+    match button {
+        MouseButton::Left => servo::MouseButton::Primary,
+        MouseButton::Right => servo::MouseButton::Secondary,
+        MouseButton::Middle => servo::MouseButton::Auxiliary,
+    }
+}
+
+/// Converts an `EngineInput` into a Servo input event.
+///
+/// Returns `None` if the input cannot be represented.
+pub fn to_servo_input(ev: &EngineInput, scale: f32) -> Option<InputEvent> {
+    match ev {
+        EngineInput::MouseMove { x, y } => Some(InputEvent::MouseMove(MouseMoveEvent::new(
+            servo::WebViewPoint::Device(servo::DevicePoint::new(x * scale, y * scale)),
+        ))),
+        EngineInput::MouseDown { button, x, y } => {
+            Some(InputEvent::MouseButton(MouseButtonEvent::new(
+                MouseButtonAction::Down,
+                map_button(*button),
+                servo::WebViewPoint::Device(servo::DevicePoint::new(x * scale, y * scale)),
+            )))
+        }
+        EngineInput::MouseUp { button, x, y } => {
+            Some(InputEvent::MouseButton(MouseButtonEvent::new(
+                MouseButtonAction::Up,
+                map_button(*button),
+                servo::WebViewPoint::Device(servo::DevicePoint::new(x * scale, y * scale)),
+            )))
+        }
+        EngineInput::Wheel { dx, dy, x, y } => Some(InputEvent::Wheel(WheelEvent::new(
+            WheelDelta {
+                x: (dx * scale) as f64,
+                y: (dy * scale) as f64,
+                z: 0.0,
+                mode: WheelMode::DeltaPixel,
+            },
+            servo::WebViewPoint::Device(servo::DevicePoint::new(x * scale, y * scale)),
+        ))),
+        EngineInput::Key {
+            down,
+            key,
+            code,
+            modifiers,
+        } => {
+            let state = if *down {
+                servo::KeyState::Down
+            } else {
+                servo::KeyState::Up
+            };
+            let key = servo::Key::from_str(key).ok()?;
+            let code = servo::Code::from_str(code).ok()?;
+            let modifiers = map_modifiers(modifiers);
+            Some(InputEvent::Keyboard(
+                servo::KeyboardEvent::new_without_event(
+                    state,
+                    key,
+                    code,
+                    servo::Location::Standard,
+                    modifiers,
+                    false,
+                    false,
+                ),
+            ))
+        }
+        EngineInput::MouseLeft => Some(InputEvent::MouseLeftViewport(
+            MouseLeftViewportEvent::default(),
+        )),
+    }
 }
 
 struct WakerImpl(Arc<dyn Fn() + Send + Sync>);
@@ -180,7 +294,11 @@ impl ServoEngine {
         let mtm =
             MainThreadMarker::new().context("ServoEngine must be created on the main thread")?;
         let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(1.0, 1.0));
-        let child = NSView::initWithFrame(NSView::alloc(mtm), frame);
+        let child: Retained<NSView> = unsafe {
+            let obj: Retained<WrenContentView> =
+                msg_send![mtm.alloc::<WrenContentView>(), initWithFrame: frame];
+            Retained::into_super(obj)
+        };
         child.setHidden(true);
         parent_view.addSubview(&child);
 
@@ -423,6 +541,20 @@ impl Engine for ServoEngine {
         if self.shown == Some(id) {
             self.shown = None;
             self.child_view.setHidden(true);
+        }
+    }
+
+    fn input(&mut self, id: WebViewId, ev: EngineInput) {
+        let Some(entry) = self.views.get(&id) else {
+            return;
+        };
+        let scale = self
+            .child_view
+            .window()
+            .map(|w| w.backingScaleFactor() as f32)
+            .unwrap_or(1.0);
+        if let Some(servo_ev) = to_servo_input(&ev, scale) {
+            entry.webview.notify_input_event(servo_ev);
         }
     }
 
