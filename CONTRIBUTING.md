@@ -23,6 +23,13 @@ Servo) must keep its header and be listed in `NOTICE`.
 
 Small fixes and docs may go straight to `main` for the maintainer.
 
+## Releases
+
+Pull request titles become changelog lines, so write them as Conventional
+Commits. release-please keeps a Release PR open on `main`; merging it tags
+the release (`vX.Y.Z`) and publishes the GitHub Release. Do not create tags
+or releases by hand.
+
 ## Rules
 
 - Never commit captured traffic, tokens, cookies or real user data.
