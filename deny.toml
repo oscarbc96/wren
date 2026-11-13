@@ -30,9 +30,8 @@ allow = [
   "BSL-1.0",
   # libtomcrypt inside sqlcipher-src (bundled SQLCipher).
   "WTFPL",
-  # Wren itself and Zed's non-GPUI crates.
+  # Wren itself (and the template code it reuses).
   "AGPL-3.0-or-later",
-  "GPL-3.0-or-later",
 ]
 
 [bans]
@@ -44,9 +43,5 @@ unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = [
-  "https://github.com/zed-industries/zed",
-  # Git dependencies of GPUI at the pinned rev (Zed forks and wgpu).
-  "https://github.com/zed-industries/oo7",
-  "https://github.com/zed-industries/font-kit",
   "https://github.com/gfx-rs/wgpu",
 ]

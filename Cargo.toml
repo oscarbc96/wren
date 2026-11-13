@@ -10,19 +10,10 @@ license = "AGPL-3.0-or-later"
 # GPUI and reused Zed crates share one Zed git rev (spec section 3, Dependencies).
 [workspace.dependencies]
 servo = "=0.8.0"
-gpui = { git = "https://github.com/zed-industries/zed", rev = "d3fc053d5b62386247b15f069871eabe817032ab" }
-gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "d3fc053d5b62386247b15f069871eabe817032ab", default-features = false, features = [
-  "font-kit",
-] }
-gpui_apple = { git = "https://github.com/zed-industries/zed", rev = "d3fc053d5b62386247b15f069871eabe817032ab", features = [
-  "font-kit",
-] }
-theme = { git = "https://github.com/zed-industries/zed", rev = "d3fc053d5b62386247b15f069871eabe817032ab" }
-ui = { git = "https://github.com/zed-industries/zed", rev = "d3fc053d5b62386247b15f069871eabe817032ab" }
-component = { git = "https://github.com/zed-industries/zed", rev = "d3fc053d5b62386247b15f069871eabe817032ab" }
-menu = { git = "https://github.com/zed-industries/zed", rev = "d3fc053d5b62386247b15f069871eabe817032ab" }
-icons = { git = "https://github.com/zed-industries/zed", rev = "d3fc053d5b62386247b15f069871eabe817032ab" }
-ui_input = { git = "https://github.com/zed-industries/zed", rev = "d3fc053d5b62386247b15f069871eabe817032ab" }
+# UI: GPUI-CE (Apache-2.0) from crates.io, pinned exactly and bumped by hand.
+gpui = { package = "gpui-ce", version = "=0.3.0" }
+gpui_platform = { package = "gpui_ce_platform", version = "=0.3.0", features = ["font-kit"] }
+gpui_elements = { package = "gpui_ce_elements", version = "=0.3.0" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["raw_value"] }
 thiserror = "2"

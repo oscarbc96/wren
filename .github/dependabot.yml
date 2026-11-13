@@ -22,17 +22,10 @@ updates:
           - minor
           - patch
     ignore:
-      # GPUI and the reused Zed crates share one git rev on purpose (spec
-      # section 3, Dependencies); bump them by hand, all together.
-      - dependency-name: gpui
-      - dependency-name: gpui_platform
-      - dependency-name: gpui_apple
-      - dependency-name: ui
-      - dependency-name: theme
-      - dependency-name: component
-      - dependency-name: menu
-      - dependency-name: icons
-      - dependency-name: ui_input
+      # GPUI-CE and Servo are pinned exactly (spec section 5c); bump by hand.
+      - dependency-name: gpui-ce
+      - dependency-name: gpui_ce_platform
+      - dependency-name: gpui_ce_elements
       # Servo is pinned exactly and bumped deliberately.
       - dependency-name: servo
 
