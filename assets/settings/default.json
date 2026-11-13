@@ -1,0 +1,6 @@
+// Wren built-in defaults.
+{
+  "search": { "url": "https://duckduckgo.com/?q={query}" },
+  "startup": { "restore_session": true },
+  "tabs": { "new_tab_url": "about:blank", "closed_stack": 25 }
+}

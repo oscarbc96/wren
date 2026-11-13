@@ -1,0 +1,107 @@
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+
+/// Identifier of a chat provider (for example `fake`), as registered by the app.
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(transparent)]
+pub struct ProviderId(pub String);
+
+/// Provider-side workspace identifier. Unique only within its provider.
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(transparent)]
+pub struct WorkspaceId(pub String);
+
+/// Globally unique workspace key, text form `<provider>/<id>`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct WorkspaceKey {
+    pub provider: ProviderId,
+    pub id: WorkspaceId,
+}
+
+impl WorkspaceKey {
+    pub fn new(provider: impl Into<String>, id: impl Into<String>) -> Self {
+        Self {
+            provider: ProviderId(provider.into()),
+            id: WorkspaceId(id.into()),
+        }
+    }
+}
+
+impl std::fmt::Display for WorkspaceKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}/{}", self.provider.0, self.id.0)
+    }
+}
+
+impl std::str::FromStr for WorkspaceKey {
+    type Err = String;
+
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        match text.split_once('/') {
+            Some((provider, id))
+                if !provider.is_empty() && !id.is_empty() && !id.contains(['/', '\\']) =>
+            {
+                Ok(Self::new(provider, id))
+            }
+            _ => Err(format!("workspace key {text:?} is not <provider>/<id>")),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct SearchSettings {
+    pub url: String,
+}
+
+impl Default for SearchSettings {
+    fn default() -> Self {
+        Self {
+            url: "https://duckduckgo.com/?q={query}".into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct StartupSettings {
+    pub restore_session: bool,
+}
+
+impl Default for StartupSettings {
+    fn default() -> Self {
+        Self {
+            restore_session: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct TabSettings {
+    pub new_tab_url: String,
+    pub closed_stack: usize,
+}
+
+impl Default for TabSettings {
+    fn default() -> Self {
+        Self {
+            new_tab_url: "about:blank".into(),
+            closed_stack: 25,
+        }
+    }
+}
+
+/// All user-visible settings.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct Settings {
+    pub search: SearchSettings,
+    pub startup: StartupSettings,
+    pub tabs: TabSettings,
+}
+

@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Settings",
+  "description": "All user-visible settings.",
+  "type": "object",
+  "properties": {
+    "search": {
+      "$ref": "#/$defs/SearchSettings",
+      "default": {
+        "url": "https://duckduckgo.com/?q={query}"
+      }
+    },
+    "startup": {
+      "$ref": "#/$defs/StartupSettings",
+      "default": {
+        "restore_session": true
+      }
+    },
+    "tabs": {
+      "$ref": "#/$defs/TabSettings",
+      "default": {
+        "new_tab_url": "about:blank",
+        "closed_stack": 25
+      }
+    }
+  },
+  "$defs": {
+    "SearchSettings": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "default": "https://duckduckgo.com/?q={query}"
+        }
+      }
+    },
+    "StartupSettings": {
+      "type": "object",
+      "properties": {
+        "restore_session": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "TabSettings": {
+      "type": "object",
+      "properties": {
+        "new_tab_url": {
+          "type": "string",
+          "default": "about:blank"
+        },
+        "closed_stack": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0,
+          "default": 25
+        }
+      }
+    }
+  }
+}
