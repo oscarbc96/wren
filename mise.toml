@@ -69,3 +69,49 @@ run = [
 [tasks."bundle:run"]
 description = "Run the bundled app so logs reach the terminal"
 run = "target/release/Wren.app/Contents/MacOS/wren"
+
+[tasks."site:install"]
+description = "Install site dependencies"
+dir = "site"
+run = "bun install --frozen-lockfile"
+
+[tasks."site:dev"]
+description = "Run the docs site dev server"
+dir = "site"
+depends = ["site:install"]
+run = "bun run dev"
+
+[tasks."site:build"]
+description = "Build the docs site"
+dir = "site"
+depends = ["site:install"]
+run = "bun run t:build"
+
+[tasks."site:test"]
+description = "Test the docs site"
+dir = "site"
+depends = ["site:install"]
+run = "bun run t:test"
+
+[tasks."site:lint"]
+description = "Lint the docs site"
+dir = "site"
+depends = ["site:install"]
+run = "bun run t:lint"
+
+[tasks."site:verify"]
+description = "Lint, type-check and link-check the built docs site"
+dir = "site"
+depends = ["site:install", "site:build"]
+run = "bun run t:verify"
+
+[tasks."site:lighthouse"]
+description = "Lighthouse CI and byte budgets against the built site"
+dir = "site"
+depends = ["site:install", "site:build"]
+run = "bun run t:lighthouse"
+
+[tasks."site:check-translations"]
+description = "Check every locale is in step with English: site:check-translations -- [--staged | --base <sha>]"
+dir = "site"
+run = "bun run check-translations"

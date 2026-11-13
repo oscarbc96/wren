@@ -21,6 +21,18 @@ local steps_all = new Mapping<String, Step> {
   ["check_merge_conflict"] = Builtins.check_merge_conflict
   ["cargo_fmt"] = Builtins.cargo_fmt
   ["cargo_clippy"] = Builtins.cargo_clippy
+  // No builtin lints the site (Bun only). Runs when site/ files change.
+  ["site"] {
+    glob = "site/**"
+    check = "if [ -f site/package.json ]; then bun install --cwd site --frozen-lockfile && bun run --cwd site astro sync && bun run --cwd site turbo run build lint; fi"
+    fix = "if [ -f site/package.json ]; then bun run --cwd site format; fi"
+  }
+  // Every locale changes with its English page. Escape hatch for a staged
+  // check: TRANSLATIONS_UNCHANGED="<reason>".
+  ["site_translations"] {
+    glob = "site/**"
+    check = "if [ -f site/package.json ]; then mise run site:check-translations -- --staged; fi"
+  }
   ["taplo"] = Builtins.taplo
   ["actionlint"] = Builtins.actionlint
   ["mise"] = Builtins.mise
