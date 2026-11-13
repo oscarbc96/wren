@@ -75,11 +75,11 @@ Who it is for, in order:
 
 ## 5. Constraints
 
-- Language: Rust. License: **AGPL-3.0-or-later**, docs CC-BY-4.0, with a
-  CLA, the same as the template. Reason: owner's choice of an open core
-  (browser stays open, commercial services stay separate), and the template's
-  AGPL code is reused. UI is built on GPUI-CE (Apache-2.0), with Wren's own
-  components; no Zed GPL crates. The CLA keeps dual licensing open for the commercial
+- Language: Rust. License: **MPL-2.0** (owner decision 2026-11-13), docs CC-BY-4.0, with a
+  CLA. Reason: same licence as Servo, Firefox and Zen; file-level copyleft
+  keeps changes to Wren's files open while letting companies embed and
+  contribute. Template code reused here is relicensed by its author. UI is
+  GPUI-CE (Apache-2.0) with Wren's own components. The CLA keeps dual licensing open for the commercial
   layer. Full review in section 5b.
 - Repo, tooling and process copied from the template (section 5c): mise, hk, GPUI,
   `.agents/`, release-please, Astro site.
@@ -119,17 +119,17 @@ the core.
 
 ## 5b. License review (2026-11-13)
 
-Wren is AGPL-3.0-or-later. Every component below must be compatible with
+Wren is MPL-2.0. Every component below must be compatible with
 that and ship its notices in `NOTICE` and `THIRD_PARTY_LICENSES.html`
 (`cargo about`). `cargo deny` uses the template's allow list.
 
 | Component | License | Status | Notes |
 |---|---|---|---|
-| Servo, Stylo, WebRender, SpiderMonkey (mozjs) | MPL-2.0 | OK | MPL-2.0 files stay MPL (file-level copyleft); combining into AGPL is allowed by MPL 3.3. Our Servo patch queue is MPL and public |
+| Servo, Stylo, WebRender, SpiderMonkey (mozjs) | MPL-2.0 | OK | Same licence as Wren. Our Servo patch queue is MPL and public |
 | servo-media | MPL-2.0 | OK | |
 | GStreamer core and plugins | LGPL-2.1-or-later | OK with care | Link dynamically, ship as dylibs in the bundle. Ship only `base`, `good` and the needed `bad` plugins; exclude GPL plugins (`ugly`, x264) and patent-encumbered codecs. Meet uses VP8/VP9/AV1 and Opus (royalty-free); H.264/AAC through macOS VideoToolbox/AudioToolbox, whose patents Apple covers |
-| GPUI-CE (`gpui-ce`, `gpui_ce_platform`, `gpui_ce_elements`, crates.io 0.3.0) | Apache-2.0 | OK | Community fork of Zed's GPUI; Apache-2.0 is GPLv3/AGPL-compatible. Zed's GPL `ui`/`theme` crates are not used |
-| Template code (settings, themes, mcp, plugin host, scripts, site) | AGPL-3.0-or-later | OK | Same owner; copied with headers |
+| GPUI-CE (`gpui-ce`, `gpui_ce_platform`, `gpui_ce_elements`, crates.io 0.3.0) | Apache-2.0 | OK | Community fork of Zed's GPUI; Apache-2.0 is MPL-compatible. Zed's GPL `ui`/`theme` crates are not used |
+| Template code (settings, mcp, plugin host, scripts, site) | relicensed to MPL-2.0 by its author | OK | Same owner |
 | Obscura (crates, reader, `obscura-cdp`) | Apache-2.0 | OK | Vendored `cosmic-text`, `taffy` are MIT/Apache; `wreq-util` to verify. V8 is BSD-3-Clause, OK |
 | Obscura stealth build (wreq + BoringSSL) | BoringSSL: ISC plus legacy OpenSSL license | **Avoid** | The legacy OpenSSL license is GPL-incompatible. Use Obscura's rustls build; Wren needs no fingerprint spoofing |
 | Brave `adblock` | MPL-2.0 | OK | |
@@ -152,9 +152,9 @@ Not code licenses, still to respect:
 - **Search APIs**: several (e.g. Brave Search API) restrict storing or
   caching results. Pinned generated pages re-query; they never keep raw
   results beyond what the provider's terms allow.
-- **AGPL network clause**: a hosted commercial service that runs modified
-  Wren code must offer its source, unless it is a separate program or
-  dual-licensed through the CLA. Keep hosted services as separate programs.
+- **MPL scope**: others may build closed products that include Wren, but
+  changes to Wren's own files must be published under MPL-2.0. Commercial
+  layers (console, hosted agents) can be closed either way.
 
 ## 5c. Repo and tooling (copied from the template)
 
@@ -545,8 +545,8 @@ confirmation.
 
 Approved by the owner 2026-11-13, with: copy everything possible from
 the template (mise, hk, process); review all licenses (section 5b). UI on
-GPUI-CE (owner, 2026-11-13). AGPL-3.0-or-later is the owner's open-core choice and
-the template code.
+GPUI-CE (owner, 2026-11-13). MPL-2.0 is the owner's licence choice (2026-11-13); reused template code
+is relicensed by its author.
 
 Proposed by Claude (the owner may override): name "Wren";
 macOS first; GPUI chrome plus `wren://` internal pages; Obscura as

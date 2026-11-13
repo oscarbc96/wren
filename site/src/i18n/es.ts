@@ -9,7 +9,7 @@ export const es: Ui = {
     github: "GitHub",
   },
   footer: {
-    license: "Wren es código abierto bajo AGPL-3.0-or-later.",
+    license: "Wren es código abierto bajo MPL-2.0.",
     source: "Código en GitHub",
     privacy: "Privacidad",
     llms: "llms.txt",
@@ -42,7 +42,7 @@ export const es: Ui = {
       },
       {
         title: "Código abierto",
-        text: "AGPL-3.0-or-later, sin telemetría, local primero.",
+        text: "MPL-2.0, sin telemetría, local primero.",
       },
     ],
     downloadTitle: "Descargar",

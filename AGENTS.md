@@ -37,7 +37,7 @@ Do the task you were given; do not expand scope.
 - Only the `engine` crate imports `servo`. Every other crate depends on
   `engine`'s public API.
 - Platform: macOS 14+ on Apple Silicon only. CI runs on `macos-latest`.
-- Licence `AGPL-3.0-or-later`; docs are CC-BY-4.0.
+- Licence `MPL-2.0`; docs are CC-BY-4.0.
 - JavaScript: Bun only (its built-in formatter and type checker). No Node,
   npm or pnpm.
 - Never commit tokens, cookies or unredacted captures.

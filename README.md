@@ -22,5 +22,5 @@ mise run run
 
 ## Licence
 
-Code is licensed under `AGPL-3.0-or-later`. Docs are `CC-BY-4.0`. See
+Code is licensed under `MPL-2.0`. Docs are `CC-BY-4.0`. See
 `LICENSE`, `NOTICE` and `TRADEMARKS.md`.

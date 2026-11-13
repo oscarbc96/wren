@@ -1,19 +1,19 @@
 Wren
 Copyright (c) the Wren contributors
-Licensed under the GNU Affero General Public License, version 3 or later.
+Licensed under the Mozilla Public License, version 2.0 (MPL-2.0).
 See LICENSE.
 
 Third-party software
 --------------------
 Wren embeds the Servo web engine (https://servo.org), licensed under
 MPL-2.0. Servo, Stylo, WebRender and SpiderMonkey keep their MPL-2.0
-headers; they are combined with Wren's AGPL-3.0-or-later code under MPL 3.3.
+headers, like Wren's own MPL-2.0 files.
 
 Wren's user interface is built on GPUI-CE (https://github.com/gpui-ce/gpui-ce),
 a community fork of the GPUI framework, licensed under Apache-2.0.
 
 Tooling and scripts copied from the owner's template are licensed under
-AGPL-3.0-or-later.
+MPL-2.0 (relicensed by their author for Wren).
 
 The full list of third-party crates and their licences is generated with
 `cargo about` and shipped with each release. Until then, run `cargo deny list`

@@ -16,8 +16,8 @@ intentionally submit to the project.
    no-charge, royalty-free, irrevocable licence to reproduce, prepare derivative
    works of, publicly display, publicly perform, sublicense and distribute Your
    Contributions and such derivative works, **under the licence of the project at
-   the time (currently AGPL-3.0-or-later) or any other licence the Maintainer
-   chooses**, including a later version of the AGPL, a different open source
+   the time (currently MPL-2.0) or any other licence the Maintainer
+   chooses**, including a later version of the MPL, a different open source
    licence, or, where needed to resolve a licence question, a more permissive one.
    The project stays open source: the Maintainer will not relicense Wren under a
    proprietary-only licence.
@@ -36,7 +36,7 @@ intentionally submit to the project.
    or that the employer has waived those rights for it.
 4. **Originality.** You represent that each Contribution is Your original
    creation. If You include third-party material, You will identify it, with its
-   licence, in the pull request, and it must be compatible with AGPL-3.0-or-later.
+   licence, in the pull request, and it must be compatible with MPL-2.0.
 5. **No obligation.** You are not expected to provide support. Unless required by
    law or agreed in writing, You provide Contributions "AS IS", without warranties
    or conditions of any kind.
