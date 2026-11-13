@@ -9,3 +9,20 @@ name = "wren"
 path = "src/main.rs"
 
 [dependencies]
+
+[dev-dependencies]
+servo = { workspace = true }
+winit = "0.30"
+gpui = { workspace = true }
+gpui_platform = { workspace = true, default-features = false, features = ["font-kit"] }
+proc-macro2 = "=1.0.103"
+objc2 = "0.6"
+objc2-app-kit = { workspace = true }
+objc2-foundation = "0.3"
+clap = { workspace = true }
+url = { workspace = true }
+anyhow = { workspace = true }
+sysinfo = { workspace = true }
+embedder-traits = { package = "servo-embedder-traits", version = "=0.8.0" }
+tracing = "0.1"
+rustls = { version = "0.23", features = ["aws_lc_rs"] }

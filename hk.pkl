@@ -9,6 +9,7 @@ fail_fast = false
 
 exclude = List(
   "target/**",
+  "vendor/**",
   // Verbatim upstream texts.
   "LICENSE",
   "CODE_OF_CONDUCT.md",
