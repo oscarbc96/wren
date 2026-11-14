@@ -2,6 +2,11 @@
 
 use url::Url;
 
+pub use adblock_rules::RequestKind;
+
+/// Closure used by [`Engine::set_request_filter`].
+pub type RequestFilter = Box<dyn Fn(&Url, &Url, RequestKind) -> bool>;
+
 /// Unique id for a web view managed by an `Engine`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub struct WebViewId(pub u64);
@@ -123,5 +128,6 @@ pub trait Engine {
     fn run_script(&mut self, _id: WebViewId, _js: &str) {}
     fn spin(&mut self);
     fn drain_events(&mut self) -> Vec<EngineEvent>;
+    fn set_request_filter(&mut self, _f: RequestFilter) {}
     fn shutdown(&mut self) {}
 }

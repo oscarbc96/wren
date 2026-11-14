@@ -100,6 +100,18 @@ impl Default for TabSettings {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct AdblockSettings {
+    pub enabled: bool,
+}
+
+impl Default for AdblockSettings {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
+}
+
 /// All user-visible settings.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
@@ -107,4 +119,5 @@ pub struct Settings {
     pub search: SearchSettings,
     pub startup: StartupSettings,
     pub tabs: TabSettings,
+    pub adblock: AdblockSettings,
 }

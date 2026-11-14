@@ -1,6 +1,6 @@
 //! In-memory `Engine` implementation used by tests.
 
-use crate::api::{Engine, EngineEvent, EngineInput, ViewRect, WebViewId};
+use crate::api::{Engine, EngineEvent, EngineInput, RequestFilter, ViewRect, WebViewId};
 use url::Url;
 
 /// One recorded call made to a `FakeEngine`.
@@ -17,6 +17,7 @@ pub enum FakeCall {
     Input(WebViewId, EngineInput),
     RunScript { id: WebViewId, js: String },
     Spin,
+    SetRequestFilter,
     DrainEvents,
 }
 
@@ -94,6 +95,10 @@ impl Engine for FakeEngine {
 
     fn spin(&mut self) {
         self.calls.push(FakeCall::Spin);
+    }
+
+    fn set_request_filter(&mut self, _f: RequestFilter) {
+        self.calls.push(FakeCall::SetRequestFilter);
     }
 
     fn drain_events(&mut self) -> Vec<EngineEvent> {
