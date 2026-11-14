@@ -107,6 +107,8 @@ impl CdpBackendFactory for WrenCdpFactory {
 pub(crate) struct TargetDomainState {
     pub page_enabled: bool,
     pub runtime_enabled: bool,
+    pub dom_enabled: bool,
+    pub network_enabled: bool,
     pub next_context_id: i64,
     pub context_id: i64,
     pub loader_id: String,
@@ -334,6 +336,7 @@ impl CdpBridge {
                             let ts = 0.0;
                             let loader = st.loader_id.clone();
                             let fid = target_id.clone();
+                            let network_enabled = st.network_enabled;
                             self.send_domain(
                                 &target_id,
                                 "Page.domContentEventFired",
@@ -344,9 +347,20 @@ impl CdpBridge {
                                 "Page.loadEventFired",
                                 json!({"timestamp": ts}),
                             );
-                            self.send_domain(&target_id, "Page.lifecycleEvent", json!({"frameId": fid, "loaderId": loader.clone(), "name":"DOMContentLoaded", "timestamp": ts}));
-                            self.send_domain(&target_id, "Page.lifecycleEvent", json!({"frameId": fid, "loaderId": loader.clone(), "name":"load", "timestamp": ts}));
-                            self.send_domain(&target_id, "Page.lifecycleEvent", json!({"frameId": fid, "loaderId": loader, "name":"networkIdle", "timestamp": ts}));
+                            self.send_domain(&target_id, "Page.lifecycleEvent", json!({"frameId": fid.clone(), "loaderId": loader.clone(), "name":"DOMContentLoaded", "timestamp": ts}));
+                            self.send_domain(&target_id, "Page.lifecycleEvent", json!({"frameId": fid.clone(), "loaderId": loader.clone(), "name":"load", "timestamp": ts}));
+                            self.send_domain(&target_id, "Page.lifecycleEvent", json!({"frameId": fid.clone(), "loaderId": loader.clone(), "name":"networkIdle", "timestamp": ts}));
+                            if network_enabled {
+                                self.send_domain(
+                                    &target_id,
+                                    "Network.loadingFinished",
+                                    json!({
+                                        "requestId": format!("{loader}-doc"),
+                                        "timestamp": ts,
+                                        "encodedDataLength": 0.0
+                                    }),
+                                );
+                            }
                             self.send_domain(
                                 &target_id,
                                 "Page.frameStoppedLoading",
@@ -380,6 +394,11 @@ impl CdpBridge {
                         }
                         (st.page_enabled, loader, st.runtime_enabled, st.context_id)
                     };
+                    let dom_enabled = self
+                        .domains
+                        .get(&target_id)
+                        .map(|s| s.dom_enabled)
+                        .unwrap_or(false);
                     if page_enabled {
                         self.send_domain(&target_id, "Page.frameNavigated", json!({
                             "frame": {"id": target_id, "loaderId": loader, "url": url.to_string(), "securityOrigin": url.origin().ascii_serialization(), "mimeType":"text/html"}
@@ -391,6 +410,51 @@ impl CdpBridge {
                             "context": {"id": ctx_id, "origin": url.to_string(), "name":"", "auxData": {"isDefault": true, "type":"default", "frameId": target_id}}
                         }));
                     }
+                    if dom_enabled {
+                        self.send_domain(&target_id, "DOM.documentUpdated", json!({}));
+                    }
+                }
+                EngineEvent::Request {
+                    id,
+                    request_id,
+                    url,
+                    method,
+                    is_document,
+                } => {
+                    let Some(target_id) = wv_to_target.get(id).cloned() else {
+                        continue;
+                    };
+                    let (network_enabled, loader, frame_url) = {
+                        let st = self.domains.entry(target_id.clone()).or_default();
+                        let loader = if st.loader_id.is_empty() {
+                            "loader-0".to_string()
+                        } else {
+                            st.loader_id.clone()
+                        };
+                        (st.network_enabled, loader, st.frame_url.clone())
+                    };
+                    if !network_enabled {
+                        continue;
+                    }
+                    self.send_domain(
+                        &target_id,
+                        "Network.requestWillBeSent",
+                        json!({
+                            "requestId": request_id.to_string(),
+                            "loaderId": loader,
+                            "documentURL": frame_url,
+                            "request": {
+                                "url": url.to_string(),
+                                "method": method,
+                                "headers": {}
+                            },
+                            "timestamp": 0.0,
+                            "wallTime": 0.0,
+                            "initiator": {"type": if *is_document { "other" } else { "script" }},
+                            "type": if *is_document { "Document" } else { "Other" },
+                            "frameId": target_id
+                        }),
+                    );
                 }
                 EngineEvent::TitleChanged { .. } => {}
                 EngineEvent::Console { id, level, message } => {
@@ -513,8 +577,21 @@ impl CdpBridge {
             "Runtime" => {
                 crate::cdp_domains::runtime::handle(self, engine, &tab, target_id, method, params)
             }
+            "DOM" => crate::cdp_domains::dom::handle(self, engine, &tab, target_id, method, params),
+            "Network" => {
+                if method == "Network.enable" {
+                    self.domain_state(target_id).network_enabled = true;
+                } else if method == "Network.disable" {
+                    self.domain_state(target_id).network_enabled = false;
+                }
+                crate::cdp_domains::network::handle(method, params)
+            }
             "Input" => crate::cdp_domains::input::handle(engine, &tab, method, params),
-            "Console" | "Log" => crate::cdp_domains::console::handle(method),
+            "Console" => crate::cdp_domains::console::handle(method),
+            "Log" | "Emulation" | "CSS" | "Debugger" | "Performance" | "Overlay" | "Profiler"
+            | "HeapProfiler" | "Security" | "ServiceWorker" | "Inspector" | "Audits" => {
+                crate::cdp_domains::emulation::handle(method, params)
+            }
             _ => CallResult::Immediate(Err(CdpFailure {
                 code: -32601,
                 message: format!("'{method}' wasn't found"),

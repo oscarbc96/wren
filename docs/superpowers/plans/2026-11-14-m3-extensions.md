@@ -199,7 +199,7 @@ Roadmap: `docs/superpowers/plans/2026-11-13-roadmap.md`.
 - [ ] **Step 1: Write failing tests**: `action_button_shows_badge`, `popup_opens_and_closes_on_blur`, `install_from_store_url_parses_id` (`https://chromewebstore.google.com/detail/dark-reader/eimadpbcbfnmbkopoojfekhnkhdbieeh` -> id), `install_requires_confirm`, `disable_removes_content_scripts`.
 - [ ] **Step 2: Run** `cargo nextest run -p wren --test extensions_ui`. Expected: FAIL.
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** tests; screenshot skill: `wren://extensions` with the `hello` fixture loaded unpacked, and the popup open over a page. Describe both PNGs in the PR.
+- [ ] **Step 4: Run** tests; screenshot skill: `wren://extensions` with the `hello` fixture loaded unpacked, and the popup open over a page. Describe both ONGs in the PR.
 - [ ] **Step 5: Commit** `feat(extensions): action, popup, options and extensions page`
 
 ### Task 7: `declarativeNetRequest` on the adblock engine
