@@ -36,6 +36,12 @@
       "default": {
         "enabled": true
       }
+    },
+    "hang": {
+      "$ref": "#/$defs/HangSettings",
+      "default": {
+        "timeout_seconds": 5
+      }
     }
   },
   "$defs": {
@@ -102,6 +108,17 @@
         "enabled": {
           "type": "boolean",
           "default": true
+        }
+      }
+    },
+    "HangSettings": {
+      "type": "object",
+      "properties": {
+        "timeout_seconds": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 5
         }
       }
     }

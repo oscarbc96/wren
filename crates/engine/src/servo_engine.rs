@@ -2,7 +2,7 @@
 
 use crate::api::{
     Engine, EngineEvent, EngineInput, LoadState, Modifiers, MouseButton, NavigationFilter,
-    RequestFilter, RequestKind, ViewRect, WebViewId,
+    ProcessInfo, RequestFilter, RequestKind, ViewRect, WebViewId,
 };
 use anyhow::{Context, Result};
 use dpi::PhysicalSize;
@@ -322,6 +322,14 @@ struct WebViewEntry {
     webview: WebView,
 }
 
+#[derive(Clone)]
+struct PingState {
+    last_reply: Instant,
+    outstanding: bool,
+    last_sent: Instant,
+    hung_emitted: bool,
+}
+
 /// Servo-backed engine.
 ///
 /// Runs Servo in multiprocess mode: every web view is its own browsing
@@ -350,6 +358,8 @@ pub struct ServoEngine {
     shown: Option<WebViewId>,
     navigation_filter: Rc<std::cell::RefCell<Option<NavigationFilter>>>,
     request_filter: std::rc::Rc<std::cell::RefCell<Option<RequestFilter>>>,
+    hang_timeout: Duration,
+    ping_state: HashMap<WebViewId, PingState>,
 }
 
 impl ServoEngine {
@@ -398,12 +408,13 @@ impl ServoEngine {
             .build();
         servo.setup_logging();
 
+        let now = Instant::now();
         Ok(Self {
             _servo: Some(servo),
             sys: System::new().context("process table")?,
             pids: HashMap::new(),
             awaiting_pid: VecDeque::new(),
-            last_scan: Instant::now(),
+            last_scan: now,
             lost_process: false,
             rendering_context,
             parent_view,
@@ -414,6 +425,8 @@ impl ServoEngine {
             shown: None,
             navigation_filter: Rc::new(std::cell::RefCell::new(None)),
             request_filter: std::rc::Rc::new(std::cell::RefCell::new(None)),
+            hang_timeout: Duration::from_secs(5),
+            ping_state: HashMap::new(),
         })
     }
 
@@ -425,11 +438,56 @@ impl ServoEngine {
         v
     }
 
+    pub fn set_hang_timeout(&mut self, secs: u64) {
+        self.hang_timeout = Duration::from_secs(secs.max(1));
+    }
+
+    fn pid_for_view(&self, id: WebViewId) -> Option<u32> {
+        self.pids
+            .iter()
+            .find_map(|(pid, vid)| if *vid == id { Some(*pid) } else { None })
+    }
+
+    fn check_hangs(&mut self) {
+        let now = Instant::now();
+        let ids: Vec<WebViewId> = self.views.keys().copied().collect();
+        for id in ids {
+            let state = self.ping_state.entry(id).or_insert_with(|| PingState {
+                last_reply: now,
+                outstanding: false,
+                last_sent: now - Duration::from_secs(10),
+                hung_emitted: false,
+            });
+            if state.outstanding {
+                if !state.hung_emitted && now.duration_since(state.last_reply) > self.hang_timeout {
+                    self.events.push(EngineEvent::Hung { id });
+                    state.hung_emitted = true;
+                }
+            } else if now.duration_since(state.last_sent) >= Duration::from_secs(1)
+                && let Some(entry) = self.views.get(&id)
+            {
+                let events = self.events.clone();
+                entry.webview.evaluate_javascript("0", move |_| {
+                    events.push(EngineEvent::Responsive { id });
+                });
+                let st = self.ping_state.entry(id).or_insert_with(|| PingState {
+                    last_reply: now,
+                    outstanding: false,
+                    last_sent: now,
+                    hung_emitted: false,
+                });
+                st.outstanding = true;
+                st.last_sent = now;
+            }
+        }
+    }
+
     /// Shuts Servo down (content processes exit), then kills any child that
     /// is still alive. Call before quitting; `Drop` calls it too.
     pub fn shutdown(&mut self) {
         self.views.clear();
         self.shown = None;
+        self.ping_state.clear();
         let Some(servo) = self._servo.take() else {
             return;
         };
@@ -544,6 +602,7 @@ impl Engine for ServoEngine {
         self.views.remove(&id);
         self.awaiting_pid.retain(|w| *w != id);
         self.pids.retain(|_, w| *w != id);
+        self.ping_state.remove(&id);
     }
 
     fn load(&mut self, id: WebViewId, url: &Url) {
@@ -651,6 +710,7 @@ impl Engine for ServoEngine {
         }
         self.servo().spin_event_loop();
         self.watch_children();
+        self.check_hangs();
         if let Some(id) = self.shown
             && let Some(entry) = self.views.get(&id)
         {
@@ -659,12 +719,65 @@ impl Engine for ServoEngine {
         self.rendering_context.present();
     }
 
-    fn drain_events(&mut self) -> Vec<EngineEvent> {
-        self.events.drain()
-    }
-
     fn set_request_filter(&mut self, f: RequestFilter) {
         *self.request_filter.borrow_mut() = Some(f);
+    }
+
+    fn kill(&mut self, id: WebViewId) {
+        if let Some(pid) = self.pid_for_view(id) {
+            let _ = std::process::Command::new("kill")
+                .arg("-9")
+                .arg(pid.to_string())
+                .status();
+        }
+    }
+
+    fn processes(&mut self) -> Vec<ProcessInfo> {
+        self.sys.refresh_processes(ProcessesToUpdate::All, true);
+        let mut out = Vec::new();
+        let me = Pid::from_u32(std::process::id());
+        if let Some(p) = self.sys.process(me) {
+            out.push(ProcessInfo {
+                id: None,
+                pid: std::process::id(),
+                rss_bytes: p.memory(),
+                cpu_percent: p.cpu_usage(),
+            });
+        } else {
+            out.push(ProcessInfo {
+                id: None,
+                pid: std::process::id(),
+                rss_bytes: 0,
+                cpu_percent: 0.0,
+            });
+        }
+        let pairs = self.content_pids();
+        for (id, pid) in pairs {
+            if let Some(p) = self.sys.process(Pid::from_u32(pid)) {
+                out.push(ProcessInfo {
+                    id: Some(id),
+                    pid,
+                    rss_bytes: p.memory(),
+                    cpu_percent: p.cpu_usage(),
+                });
+            }
+        }
+        out
+    }
+
+    fn drain_events(&mut self) -> Vec<EngineEvent> {
+        let evs = self.events.drain();
+        let now = Instant::now();
+        for ev in &evs {
+            if let EngineEvent::Responsive { id } = ev
+                && let Some(st) = self.ping_state.get_mut(id)
+            {
+                st.outstanding = false;
+                st.last_reply = now;
+                st.hung_emitted = false;
+            }
+        }
+        evs
     }
 
     fn shutdown(&mut self) {

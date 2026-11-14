@@ -55,6 +55,21 @@ pub enum EngineEvent {
         id: WebViewId,
         url: Url,
     },
+    Hung {
+        id: WebViewId,
+    },
+    Responsive {
+        id: WebViewId,
+    },
+}
+
+/// Information about a browser or content process.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ProcessInfo {
+    pub id: Option<WebViewId>,
+    pub pid: u32,
+    pub rss_bytes: u64,
+    pub cpu_percent: f32,
 }
 
 /// Filter for navigations: return `false` to deny.
@@ -137,5 +152,9 @@ pub trait Engine {
     fn spin(&mut self);
     fn drain_events(&mut self) -> Vec<EngineEvent>;
     fn set_request_filter(&mut self, _f: RequestFilter) {}
+    fn kill(&mut self, _id: WebViewId) {}
+    fn processes(&mut self) -> Vec<ProcessInfo> {
+        Vec::new()
+    }
     fn shutdown(&mut self) {}
 }
