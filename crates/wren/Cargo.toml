@@ -10,6 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 engine = { path = "../engine" }
+adblock_rules = { path = "../adblock_rules" }
 tabs = { path = "../tabs" }
 store = { path = "../store" }
 omnibox = { path = "../omnibox" }
