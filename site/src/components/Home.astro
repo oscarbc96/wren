@@ -1,5 +1,7 @@
 ---
 import Layout from "@/layouts/Layout.astro";
+import HeroBird from "@/components/HeroBird.astro";
+import Star from "@lucide/astro/icons/star";
 import SiteHeader from "@/components/SiteHeader.astro";
 import { absoluteUrl, repoUrl, siteName } from "@/lib/seo";
 import { getStars } from "@/lib/github";
@@ -15,6 +17,7 @@ const stars = await getStars();
 const t = ui.home;
 const repo = repoUrl;
 const designUrl = "https://github.com/oscarbc96/wren/blob/main/docs/superpowers/specs/2026-11-13-wren-browser-design.md";
+const mark = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/brand/wren`;
 const button =
   "inline-flex items-center justify-center rounded-lg px-5 py-2.5 text-sm font-medium transition-colors no-underline";
 ---
@@ -57,19 +60,27 @@ const button =
 
     <div class="mx-auto w-full max-w-5xl px-4 sm:px-6">
       <section class="py-16 sm:py-24" aria-labelledby="hero-title">
+        <div class="relative mb-6 aspect-[1363/1092] w-[min(350px,calc(100vw-2rem))]">
+          <img src={`${mark}-mark-light.svg`} alt="" width="350" height="280" class="absolute inset-0 h-full w-full dark:hidden" />
+          <img src={`${mark}-mark-dark.svg`} alt="" width="350" height="280" class="absolute inset-0 hidden h-full w-full dark:block" />
+          <HeroBird />
+        </div>
         <h1
           id="hero-title"
-          class="wren-wordmark text-5xl leading-none text-fd-foreground sm:text-7xl"
+          class="wren-wordmark text-7xl leading-none text-fd-foreground sm:text-8xl"
         >
-          {t.heading}
+          Wren
         </h1>
+        <p class="mt-4 text-3xl font-semibold leading-tight tracking-tight text-fd-foreground sm:text-5xl">
+          {t.heading}
+        </p>
         <p class="mt-5 max-w-2xl text-base leading-7 text-fd-muted-foreground">
           {t.lede}
         </p>
         <div class="mt-8 flex flex-wrap gap-3">
           <a
             class={`${button} border border-fd-border bg-fd-card text-fd-foreground hover:bg-fd-muted`}
-            href={repo}>{t.sourceButton}{stars && <span class="ml-2 text-xs text-fd-muted-foreground" aria-label={ui.starsLabel.replace("{count}", stars)}>★ {stars}</span>}</a
+            href={repo}>{t.sourceButton}{stars && <span class="ml-2 inline-flex items-center gap-1 text-xs text-fd-muted-foreground" aria-label={ui.starsLabel.replace("{count}", stars)}><Star size={16} fill="currentColor" aria-hidden="true" />{stars}</span>}</a
           >
           <a
             class={`${button} bg-fd-primary text-fd-primary-foreground hover:opacity-90`}

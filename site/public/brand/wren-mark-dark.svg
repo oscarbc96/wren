@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="287 418 1363 1092" role="img" aria-labelledby="wren-icon-title">
+  <title id="wren-icon-title">Wren</title>
+  <defs>
+
+    <!-- Main ink: deep teal at the base of the W, coral at the bird and arrow. -->
+    <linearGradient id="ink" gradientUnits="userSpaceOnUse" x1="760" y1="1360" x2="1300" y2="640">
+      <stop offset="0" stop-color="#20e8dd"/>
+      <stop offset="0.38" stop-color="#4ab9c0"/>
+      <stop offset="0.78" stop-color="#ff7672"/>
+      <stop offset="1" stop-color="#ff7672"/>
+    </linearGradient>
+
+    <!-- Arrowhead: coral with a warm highlight near the tip. -->
+    <linearGradient id="arrow" gradientUnits="userSpaceOnUse" x1="1180" y1="1300" x2="1530" y2="640">
+      <stop offset="0" stop-color="#20e8dd"/>
+      <stop offset="0.45" stop-color="#ff7672"/>
+      <stop offset="0.85" stop-color="#ff9a80"/>
+      <stop offset="1" stop-color="#ff7672"/>
+    </linearGradient>
+
+    <filter id="blur" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="28"/>
+    </filter>
+
+    <!-- Cut-outs: the slit under the wing and the notch in the arrow. -->
+    <mask id="cuts" maskUnits="userSpaceOnUse" x="0" y="0" width="1932" height="1932">
+      <rect width="1932" height="1932" fill="#fff"/>
+      <path d="M720 842 C850 846 965 832 1015 792 C1048 766 1060 742 1057 712"
+            fill="none" stroke="#000" stroke-width="24" stroke-linecap="round"/>
+      <circle cx="1352" cy="918" r="34" fill="#000"/>
+    </mask>
+
+    <!-- Bird silhouette, shared by the body and the separately animated wing. -->
+    <path id="bird-shape" d="M712 535 C716 525 727 528 732 540 L842 702
+                   C890 672 940 652 988 636 C1030 590 1068 556 1115 556
+                   C1150 556 1178 572 1198 592 L1272 602
+                   C1250 612 1218 618 1202 630 C1180 652 1170 690 1165 732
+                   C1155 822 1098 892 975 912 C930 916 900 905 872 892
+                   L760 860 L726 830 C745 810 762 795 772 778
+                   L750 730 L772 728 L700 620 C686 600 684 585 702 578
+                   L705 574 C704 556 706 545 712 535 Z"/>
+
+    <!-- Wing region: above the slit, in front of the tail spike. -->
+    <clipPath id="wing-clip">
+      <path d="M720 832 C850 836 965 822 1008 783 C1041 757 1050 735 1048 706
+               L1042 650 L988 636 L842 702 L772 728 L690 760 L690 832 Z"/>
+    </clipPath>
+
+      </defs>
+  <g opacity="0.55" filter="url(#blur)">
+      <!-- Ribbon: loop that becomes the branch the bird sits on. -->
+      <path d="M640 940 C612 862 590 800 525 800 C468 800 438 850 438 896
+               C438 975 515 1014 592 1012 C700 1010 758 955 820 910
+               C885 865 935 852 1010 848"
+            fill="none" stroke="url(#ink)" stroke-width="82" stroke-linecap="butt"/>
+
+      <!-- The W, ending in the arrow shaft. -->
+      <path d="M678 1050 L795 1355 L900 1075 C935 985 995 985 1030 1075 L1160 1355 L1300 985"
+            fill="none" stroke="url(#ink)" stroke-width="88"
+            stroke-linecap="round" stroke-linejoin="round"/>
+
+      <!-- Bird and legs: their own group so the site can animate the landing. -->
+
+      <g mask="url(#cuts)">
+        <!-- Arrowhead. -->
+        <path d="M1204 886 L1535 622 L1466 1032 L1408 968 L1312 1000 L1286 905 Z"
+              fill="url(#arrow)"/>
+      </g>
+    </g>
+  <g>
+      <!-- Ribbon: loop that becomes the branch the bird sits on. -->
+      <path d="M640 940 C612 862 590 800 525 800 C468 800 438 850 438 896
+               C438 975 515 1014 592 1012 C700 1010 758 955 820 910
+               C885 865 935 852 1010 848"
+            fill="none" stroke="url(#ink)" stroke-width="82" stroke-linecap="butt"/>
+
+      <!-- The W, ending in the arrow shaft. -->
+      <path d="M678 1050 L795 1355 L900 1075 C935 985 995 985 1030 1075 L1160 1355 L1300 985"
+            fill="none" stroke="url(#ink)" stroke-width="88"
+            stroke-linecap="round" stroke-linejoin="round"/>
+
+      <!-- Bird and legs: their own group so the site can animate the landing. -->
+
+      <g mask="url(#cuts)">
+        <!-- Arrowhead. -->
+        <path d="M1204 886 L1535 622 L1466 1032 L1408 968 L1312 1000 L1286 905 Z"
+              fill="url(#arrow)"/>
+      </g>
+    </g>
+</svg>

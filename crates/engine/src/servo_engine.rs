@@ -604,6 +604,12 @@ impl Engine for ServoEngine {
         }
     }
 
+    fn run_script(&mut self, id: WebViewId, js: &str) {
+        if let Some(entry) = self.views.get(&id) {
+            entry.webview.evaluate_javascript(js, |_| {});
+        }
+    }
+
     fn spin(&mut self) {
         if self._servo.is_none() {
             return;

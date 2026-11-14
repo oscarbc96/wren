@@ -175,6 +175,7 @@ fn register_actions(cx: &mut App) {
         KeyBinding::new("cmd-[", actions::Back, None),
         KeyBinding::new("cmd-]", actions::Forward, None),
         KeyBinding::new("cmd-d", actions::Toggle, None),
+        KeyBinding::new("cmd-\\", actions::Fill, None),
         KeyBinding::new("cmd-1", actions::Select1, None),
         KeyBinding::new("cmd-2", actions::Select2, None),
         KeyBinding::new("cmd-3", actions::Select3, None),

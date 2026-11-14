@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { githubReleases } from "@fumadocs/changelog/github";
 import type { GitHubChangelogEntry } from "@fumadocs/changelog/github";
+import { type PendingRelease, parsePendingRelease } from "./pending";
 
 /**
  * Build-time GitHub data (releases, stars). Nothing here may fail the build:
@@ -72,6 +73,50 @@ export function getReleasePages(): Promise<GitHubChangelogEntry[][]> {
       warn("no releases found, rendering the empty changelog");
     return pages;
   });
+}
+
+async function fetchPending(): Promise<PendingRelease | undefined> {
+  const fixture = process.env.WREN_PENDING_FIXTURE;
+  try {
+    let prs: unknown;
+    if (fixture) {
+      prs = JSON.parse(await readFile(fixture, "utf8"));
+    } else if (fixture === "") {
+      return undefined;
+    } else {
+      const headers = new Headers({ accept: "application/vnd.github+json" });
+      if (token) headers.set("authorization", `Bearer ${token}`);
+      const res = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/issues?labels=${encodeURIComponent("autorelease: pending")}&state=open&per_page=5`,
+        { headers },
+      );
+      if (!res.ok) {
+        warn(`pending release unavailable (HTTP ${res.status})`);
+        return undefined;
+      }
+      prs = await res.json();
+    }
+    if (!Array.isArray(prs)) return undefined;
+    // The issues endpoint also lists plain issues; only PRs count.
+    const pr = prs.find(
+      (item) =>
+        typeof item === "object" &&
+        item !== null &&
+        (fixture || "pull_request" in item),
+    );
+    return parsePendingRelease(pr);
+  } catch (error) {
+    warn("could not load the pending release", error);
+    return undefined;
+  }
+}
+
+let pending: Promise<PendingRelease | undefined> | undefined;
+
+/** The open release-please PR as a pending release, `undefined` when none or on any failure. */
+export function getPendingRelease(): Promise<PendingRelease | undefined> {
+  pending ??= fetchPending();
+  return pending;
 }
 
 /** `1234` as `1.2k`, `999` as `999`. */

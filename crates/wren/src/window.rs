@@ -20,6 +20,7 @@ use themes::ActiveTheme;
 pub struct BrowserWindow<E: Engine + 'static, S: Store + 'static> {
     pub engine: E,
     pub store: Arc<S>,
+    pub cred_store: Arc<dyn creds::CredStore + Send + Sync>,
     pub settings: Settings,
     pub strip: TabStrip,
     pub toolbar: ToolbarState,
@@ -29,6 +30,8 @@ pub struct BrowserWindow<E: Engine + 'static, S: Store + 'static> {
     pub omnibox_focused: bool,
     pub omnibox_editing: String,
     pub suggestions: Vec<omnibox::Suggestion>,
+    pub password_picker: Option<Vec<creds::Credential>>,
+    pub password_status: Option<String>,
     content_origin: Point<Pixels>,
     last_save: Option<Instant>,
     dirty_since: Option<Instant>,
@@ -36,7 +39,19 @@ pub struct BrowserWindow<E: Engine + 'static, S: Store + 'static> {
 }
 
 impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
-    pub fn new(mut engine: E, store: Arc<S>, settings: Settings, cx: &mut Context<Self>) -> Self {
+    pub fn new(engine: E, store: Arc<S>, settings: Settings, cx: &mut Context<Self>) -> Self {
+        let cred_store: Arc<dyn creds::CredStore + Send + Sync> =
+            Arc::new(creds::KeychainStore::new("wren.passwords"));
+        Self::new_with_creds(engine, store, cred_store, settings, cx)
+    }
+
+    pub fn new_with_creds(
+        mut engine: E,
+        store: Arc<S>,
+        cred_store: Arc<dyn creds::CredStore + Send + Sync>,
+        settings: Settings,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let new_tab_url = Url::parse(&settings.tabs.new_tab_url)
             .unwrap_or_else(|_| Url::parse("about:blank").unwrap());
         let mut strip = TabStrip::new(settings.tabs.closed_stack);
@@ -53,13 +68,26 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
         } else {
             strip.open(&mut engine, &new_tab_url, true);
         }
-        Self::finish(engine, store, settings, strip, cx)
+        Self::finish(engine, store, cred_store, settings, strip, cx)
     }
 
     /// Opens one tab per URL, the first one active, without a leading blank tab.
     pub fn with_urls(
+        engine: E,
+        store: Arc<S>,
+        settings: Settings,
+        urls: Vec<Url>,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let cred_store: Arc<dyn creds::CredStore + Send + Sync> =
+            Arc::new(creds::KeychainStore::new("wren.passwords"));
+        Self::with_urls_and_creds(engine, store, cred_store, settings, urls, cx)
+    }
+
+    pub fn with_urls_and_creds(
         mut engine: E,
         store: Arc<S>,
+        cred_store: Arc<dyn creds::CredStore + Send + Sync>,
         settings: Settings,
         urls: Vec<Url>,
         cx: &mut Context<Self>,
@@ -74,12 +102,13 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
                 strip.open(&mut engine, url, i == 0);
             }
         }
-        Self::finish(engine, store, settings, strip, cx)
+        Self::finish(engine, store, cred_store, settings, strip, cx)
     }
 
     fn finish(
         engine: E,
         store: Arc<S>,
+        cred_store: Arc<dyn creds::CredStore + Send + Sync>,
         settings: Settings,
         strip: TabStrip,
         cx: &mut Context<Self>,
@@ -104,6 +133,7 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
         Self {
             engine,
             store,
+            cred_store,
             settings,
             strip,
             toolbar: ToolbarState::new(),
@@ -113,6 +143,8 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
             omnibox_focused: false,
             omnibox_editing: text,
             suggestions: Vec::new(),
+            password_picker: None,
+            password_status: None,
             content_origin: Point {
                 x: px(0.),
                 y: px(0.),
@@ -648,7 +680,109 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
             })
     }
 
+    pub fn fill_passwords(&mut self) {
+        self.password_status = None;
+        let Some(tab) = self.active_tab().cloned() else {
+            return;
+        };
+        let origin = tab.url.origin().ascii_serialization();
+        match self.cred_store.find(&origin) {
+            Ok(creds) if creds.is_empty() => {
+                self.password_status = Some("No saved passwords for this site".to_string());
+            }
+            Ok(creds) if creds.len() == 1 => {
+                let c = &creds[0];
+                let js = creds::fill_script(&c.username, &c.password);
+                self.engine.run_script(tab.webview, &js);
+                self.password_picker = None;
+            }
+            Ok(creds) => {
+                self.password_picker = Some(creds);
+            }
+            Err(e) => {
+                self.password_status = Some(format!("Password lookup failed: {e}"));
+            }
+        }
+    }
+
+    pub fn choose_password(&mut self, idx: usize) {
+        let Some(tab) = self.active_tab().cloned() else {
+            return;
+        };
+        if let Some(list) = &self.password_picker
+            && let Some(c) = list.get(idx)
+        {
+            let js = creds::fill_script(&c.username, &c.password);
+            self.engine.run_script(tab.webview, &js);
+        }
+        self.password_picker = None;
+    }
+
+    pub fn import_passwords_from_chrome(&mut self) {
+        let home = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+        let profile = home
+            .join("Library")
+            .join("Application Support")
+            .join("Google")
+            .join("Chrome")
+            .join("Default");
+        match creds::chrome::import(&profile, self.cred_store.as_ref()) {
+            Ok(n) => self.password_status = Some(format!("Imported {n} passwords from Chrome")),
+            Err(e) => self.password_status = Some(format!("Chrome import failed: {e}")),
+        }
+    }
+
+    pub fn import_passwords_from_csv(&mut self, path: &std::path::Path) {
+        match creds::csv::import(path, self.cred_store.as_ref()) {
+            Ok(n) => self.password_status = Some(format!("Imported {n} passwords from CSV")),
+            Err(e) => self.password_status = Some(format!("CSV import failed: {e}")),
+        }
+    }
+
     fn render_content(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if let Some(list) = self.password_picker.clone() {
+            let mut items = Vec::new();
+            for (i, c) in list.iter().enumerate() {
+                let label = if c.username.is_empty() {
+                    "(no username)".to_string()
+                } else {
+                    c.username.clone()
+                };
+                items.push(
+                    div()
+                        .id(("pw-pick", i))
+                        .px(px(8.))
+                        .py(px(4.))
+                        .cursor_pointer()
+                        .on_click(cx.listener(
+                            move |this: &mut Self, _: &ClickEvent, _window, _cx| {
+                                this.choose_password(i);
+                            },
+                        ))
+                        .child(label)
+                        .into_any_element(),
+                );
+            }
+            return div()
+                .size_full()
+                .flex()
+                .flex_col()
+                .items_center()
+                .justify_center()
+                .gap(px(8.))
+                .child("Choose an account to fill")
+                .children(items)
+                .child(
+                    div()
+                        .id("pw-cancel")
+                        .cursor_pointer()
+                        .on_click(cx.listener(|this: &mut Self, _: &ClickEvent, _w, _cx| {
+                            this.password_picker = None;
+                        }))
+                        .child("Cancel"),
+                )
+                .into_any_element();
+        }
         if let Some(tab) = self.active_tab().cloned()
             && let Some(reason) = tab.crashed.clone()
         {
@@ -988,6 +1122,24 @@ impl<E: Engine + 'static, S: Store + 'static> Render for BrowserWindow<E, S> {
             .on_action(cx.listener(
                 |this: &mut Self, _: &crate::actions::Toggle, _window, _cx| {
                     this.toggle_bookmark();
+                },
+            ))
+            .on_action(
+                cx.listener(|this: &mut Self, _: &crate::actions::Fill, _window, _cx| {
+                    this.fill_passwords();
+                }),
+            )
+            .on_action(cx.listener(
+                |this: &mut Self, _: &crate::actions::ImportChrome, _window, _cx| {
+                    this.import_passwords_from_chrome();
+                },
+            ))
+            .on_action(cx.listener(
+                |this: &mut Self, _: &crate::actions::ImportCsv, _window, _cx| {
+                    this.password_status = Some(
+                        "CSV import: provide a path via settings/import action (not wired in UI)"
+                            .to_string(),
+                    );
                 },
             ))
     }
