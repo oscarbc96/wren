@@ -71,7 +71,9 @@ impl RootView {
                 | EngineEvent::NavigationDenied { .. }
                 | EngineEvent::Download { .. }
                 | EngineEvent::Hung { .. }
-                | EngineEvent::Responsive { .. } => {}
+                | EngineEvent::Responsive { .. }
+                | EngineEvent::Console { .. }
+                | EngineEvent::Request { .. } => {}
             }
         }
 

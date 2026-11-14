@@ -1,11 +1,13 @@
 //! Servo-backed `Engine` implementation.
 
 use crate::api::{
-    Engine, EngineEvent, EngineInput, EngineOptions, LoadState, MemoryRow, Modifiers, MouseButton,
-    NavigationFilter, ProcessInfo, RequestFilter, RequestKind, ViewRect, WebViewId,
+    ConsoleLevel, Engine, EngineEvent, EngineInput, EngineOptions, EvalReply, LoadState, MemoryRow,
+    Modifiers, MouseButton, NavigationFilter, ProcessInfo, RequestFilter, RequestKind,
+    ScreenshotReply, ViewRect, WebViewId,
 };
 use anyhow::{Context, Result};
 use dpi::PhysicalSize;
+use image::ImageFormat;
 use objc2::rc::Retained;
 use objc2::{MainThreadMarker, MainThreadOnly, Message, define_class, msg_send};
 use objc2_app_kit::NSView;
@@ -14,10 +16,11 @@ use raw_window_handle::{
     AppKitDisplayHandle, AppKitWindowHandle, RawDisplayHandle, RawWindowHandle,
 };
 use servo::{
-    CreateNewWebViewRequest, EventLoopWaker, InputEvent, LoadStatus, MouseButtonAction,
-    MouseButtonEvent, MouseLeftViewportEvent, MouseMoveEvent, NavigationRequest, Opts,
-    RenderingContext, Servo, ServoBuilder, WebView, WebViewBuilder, WebViewDelegate, WheelDelta,
-    WheelEvent, WheelMode, WindowRenderingContext,
+    ConsoleLogLevel, CreateNewWebViewRequest, EventLoopWaker, InputEvent, JSValue,
+    JavaScriptEvaluationError, LoadStatus, MouseButtonAction, MouseButtonEvent,
+    MouseLeftViewportEvent, MouseMoveEvent, NavigationRequest, Opts, RenderingContext, Servo,
+    ServoBuilder, WebView, WebViewBuilder, WebViewDelegate, WheelDelta, WheelEvent, WheelMode,
+    WindowRenderingContext,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::rc::Rc;
@@ -40,6 +43,56 @@ fn suggested_name_from_url(url: &Url) -> Option<String> {
         .and_then(|mut s| s.rfind(|x| !x.is_empty()))
         .map(|s| s.to_string())
         .filter(|s| !s.is_empty())
+}
+
+fn js_value_to_json(value: JSValue) -> serde_json::Value {
+    match value {
+        JSValue::Undefined | JSValue::Null => serde_json::Value::Null,
+        JSValue::Boolean(b) => serde_json::Value::Bool(b),
+        JSValue::Number(n) if n.fract() == 0.0 && n.abs() < 9.007_199_254_740_992e15 => {
+            serde_json::Value::from(n as i64)
+        }
+        JSValue::Number(n) => serde_json::Number::from_f64(n)
+            .map(serde_json::Value::Number)
+            .unwrap_or(serde_json::Value::Null),
+        JSValue::String(s) => serde_json::Value::String(s),
+        JSValue::Element(_) | JSValue::ShadowRoot(_) | JSValue::Frame(_) | JSValue::Window(_) => {
+            serde_json::json!({ "__wren_node": true })
+        }
+        JSValue::Array(items) => {
+            serde_json::Value::Array(items.into_iter().map(js_value_to_json).collect())
+        }
+        JSValue::Object(map) => {
+            let mut obj = serde_json::Map::new();
+            for (k, v) in map {
+                obj.insert(k, js_value_to_json(v));
+            }
+            serde_json::Value::Object(obj)
+        }
+    }
+}
+
+fn js_eval_error_message(err: JavaScriptEvaluationError) -> String {
+    match err {
+        JavaScriptEvaluationError::EvaluationFailure(info) => info
+            .map(|i| i.message)
+            .unwrap_or_else(|| "evaluation failure".to_string()),
+        JavaScriptEvaluationError::CompilationFailure => "compilation failure".to_string(),
+        JavaScriptEvaluationError::DocumentNotFound => "document not found".to_string(),
+        JavaScriptEvaluationError::InternalError => "internal error".to_string(),
+        JavaScriptEvaluationError::WebViewNotReady => "webview not ready".to_string(),
+        JavaScriptEvaluationError::SerializationError(e) => format!("serialization error: {e:?}"),
+    }
+}
+
+fn console_level(level: ConsoleLogLevel) -> ConsoleLevel {
+    match level {
+        ConsoleLogLevel::Log | ConsoleLogLevel::Dir | ConsoleLogLevel::Table => ConsoleLevel::Log,
+        ConsoleLogLevel::Debug | ConsoleLogLevel::Trace => ConsoleLevel::Debug,
+        ConsoleLogLevel::Info => ConsoleLevel::Info,
+        ConsoleLogLevel::Warn => ConsoleLevel::Warn,
+        ConsoleLogLevel::Error => ConsoleLevel::Error,
+    }
 }
 
 /// Returns the content-process token when args contain `--content-process <token>`.
@@ -217,6 +270,7 @@ struct Delegate {
     filter: std::rc::Rc<std::cell::RefCell<Option<RequestFilter>>>,
     frame_ready: Rc<std::cell::Cell<bool>>,
     framed: Rc<std::cell::RefCell<HashSet<WebViewId>>>,
+    next_request_id: Rc<std::cell::Cell<u64>>,
 }
 
 impl WebViewDelegate for Delegate {
@@ -259,6 +313,14 @@ impl WebViewDelegate for Delegate {
         self.events.push(EngineEvent::Crashed {
             id: self.id,
             reason,
+        });
+    }
+
+    fn show_console_message(&self, _webview: WebView, level: ConsoleLogLevel, message: String) {
+        self.events.push(EngineEvent::Console {
+            id: self.id,
+            level: console_level(level),
+            message,
         });
     }
 
@@ -347,6 +409,18 @@ impl WebViewDelegate for Delegate {
         if blocked && kind != RequestKind::Document {
             let intercepted = load.intercept(servo::WebResourceResponse::new(url.clone()));
             intercepted.finish();
+            return;
+        }
+        if !blocked {
+            let request_id = self.next_request_id.get();
+            self.next_request_id.set(request_id + 1);
+            self.events.push(EngineEvent::Request {
+                id: self.id,
+                request_id,
+                url: url.clone(),
+                method: req.method.to_string(),
+                is_document: matches!(kind, RequestKind::Document),
+            });
         }
     }
 }
@@ -406,6 +480,9 @@ pub struct ServoEngine {
     unowned_pids: HashSet<u32>,
     /// Processes still to appear for web views closed before theirs did.
     orphan_births: usize,
+    next_request_id: Rc<std::cell::Cell<u64>>,
+    pending_eval: Rc<std::cell::RefCell<HashMap<WebViewId, Vec<EvalReply>>>>,
+    pending_screenshot: Rc<std::cell::RefCell<HashMap<WebViewId, Vec<ScreenshotReply>>>>,
 }
 
 impl ServoEngine {
@@ -539,6 +616,9 @@ impl ServoEngine {
             request_filter: std::rc::Rc::new(std::cell::RefCell::new(None)),
             hang_timeout: Duration::from_secs(5),
             ping_state: HashMap::new(),
+            next_request_id: Rc::new(std::cell::Cell::new(0)),
+            pending_eval: Rc::new(std::cell::RefCell::new(HashMap::new())),
+            pending_screenshot: Rc::new(std::cell::RefCell::new(HashMap::new())),
         })
     }
 
@@ -597,6 +677,10 @@ impl ServoEngine {
     /// Shuts Servo down (content processes exit), then kills any child that
     /// is still alive. Call before quitting; `Drop` calls it too.
     pub fn shutdown(&mut self) {
+        let ids: Vec<WebViewId> = self.views.keys().copied().collect();
+        for id in ids {
+            self.fail_pending(id);
+        }
         self.views.clear();
         self.shown = None;
         self.ping_state.clear();
@@ -640,6 +724,20 @@ impl ServoEngine {
             .collect()
     }
 
+    /// Fails every pending evaluate and screenshot reply for `id`.
+    fn fail_pending(&self, id: WebViewId) {
+        if let Some(replies) = self.pending_eval.borrow_mut().remove(&id) {
+            for reply in replies {
+                reply(Err("target crashed".to_string()));
+            }
+        }
+        if let Some(replies) = self.pending_screenshot.borrow_mut().remove(&id) {
+            for reply in replies {
+                reply(Err("target crashed".to_string()));
+            }
+        }
+    }
+
     /// Attributes new child processes to web views and reports dead ones.
     fn watch_children(&mut self) {
         if self.last_scan.elapsed() < Duration::from_millis(250) {
@@ -658,6 +756,7 @@ impl ServoEngine {
             if let Some(id) = self.pids.remove(&pid)
                 && self.views.contains_key(&id)
             {
+                self.fail_pending(id);
                 self.events.push(EngineEvent::Crashed {
                     id,
                     reason: format!("content process {pid} exited"),
@@ -742,6 +841,7 @@ impl Engine for ServoEngine {
             filter: self.request_filter.clone(),
             frame_ready: self.frame_ready.clone(),
             framed: self.framed.clone(),
+            next_request_id: self.next_request_id.clone(),
         });
         let webview = WebViewBuilder::new(self.servo(), self.rendering_context.clone())
             .url(url.clone())
@@ -757,6 +857,7 @@ impl Engine for ServoEngine {
     }
 
     fn close(&mut self, id: WebViewId) {
+        self.fail_pending(id);
         if self.shown == Some(id) {
             self.shown = None;
             self.child_view.setHidden(true);
@@ -891,6 +992,67 @@ impl Engine for ServoEngine {
         if let Some(entry) = self.views.get(&id) {
             entry.webview.evaluate_javascript(js, |_| {});
         }
+    }
+
+    fn evaluate(&mut self, id: WebViewId, js: &str, reply: EvalReply) {
+        let Some(entry) = self.views.get(&id) else {
+            reply(Err("target crashed".to_string()));
+            return;
+        };
+        self.pending_eval
+            .borrow_mut()
+            .entry(id)
+            .or_default()
+            .push(reply);
+        let pending = self.pending_eval.clone();
+        entry.webview.evaluate_javascript(js, move |result| {
+            let reply = pending.borrow_mut().get_mut(&id).and_then(|v| {
+                if v.is_empty() {
+                    None
+                } else {
+                    Some(v.remove(0))
+                }
+            });
+            if let Some(reply) = reply {
+                let mapped = result.map(js_value_to_json).map_err(js_eval_error_message);
+                reply(mapped);
+            }
+        });
+    }
+
+    fn screenshot(&mut self, id: WebViewId, reply: ScreenshotReply) {
+        let Some(entry) = self.views.get(&id) else {
+            reply(Err("target crashed".to_string()));
+            return;
+        };
+        self.pending_screenshot
+            .borrow_mut()
+            .entry(id)
+            .or_default()
+            .push(reply);
+        let pending = self.pending_screenshot.clone();
+        entry.webview.take_screenshot(None, move |result| {
+            let reply = pending.borrow_mut().get_mut(&id).and_then(|v| {
+                if v.is_empty() {
+                    None
+                } else {
+                    Some(v.remove(0))
+                }
+            });
+            if let Some(reply) = reply {
+                let mapped = match result {
+                    Ok(img) => {
+                        let mut buf = std::io::Cursor::new(Vec::new());
+                        match img.write_to(&mut buf, ImageFormat::Png) {
+                            Ok(()) => Ok(buf.into_inner()),
+                            Err(e) => Err(e.to_string()),
+                        }
+                    }
+                    Err(e) => Err(format!("{e:?}")),
+                };
+                reply(mapped);
+            }
+        });
     }
 
     fn set_navigation_filter(&mut self, f: NavigationFilter) {
@@ -1036,6 +1198,9 @@ impl Engine for ServoEngine {
         // reported, the rest just reset the watchdog.
         let mut out = Vec::with_capacity(evs.len());
         for ev in evs {
+            if let EngineEvent::Crashed { id, .. } = &ev {
+                self.fail_pending(*id);
+            }
             if let EngineEvent::Responsive { id } = ev {
                 let was_hung = match self.ping_state.get_mut(&id) {
                     Some(st) => {
@@ -1064,5 +1229,34 @@ impl Engine for ServoEngine {
 impl Drop for ServoEngine {
     fn drop(&mut self) {
         self.shutdown();
+    }
+}
+
+#[cfg(test)]
+mod js_value_tests {
+    use super::js_value_to_json;
+    use servo::JSValue;
+    use std::collections::HashMap;
+
+    #[test]
+    fn servo_evaluate_returns_json() {
+        assert_eq!(js_value_to_json(JSValue::Number(2.0)), serde_json::json!(2));
+        assert_eq!(
+            js_value_to_json(JSValue::Number(0.5)),
+            serde_json::json!(0.5)
+        );
+        assert_eq!(
+            js_value_to_json(JSValue::Undefined),
+            serde_json::Value::Null
+        );
+        let mut obj = HashMap::new();
+        obj.insert(
+            "a".to_string(),
+            JSValue::Array(vec![JSValue::Number(1.0), JSValue::String("x".into())]),
+        );
+        assert_eq!(
+            js_value_to_json(JSValue::Object(obj)),
+            serde_json::json!({"a": [1, "x"]})
+        );
     }
 }
