@@ -1,0 +1,14 @@
+[[site]]
+name = "Google Calendar"
+url = "https://calendar.google.com/"
+probe = "document.querySelector('[role=\"main\"], [data-viewkey], body')"
+
+[[site]]
+name = "Google Meet"
+url = "https://meet.google.com/"
+probe = "document.querySelector('body')"
+
+[[site]]
+name = "Slack web"
+url = "https://app.slack.com/client"
+probe = "document.querySelector('body')"

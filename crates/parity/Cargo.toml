@@ -12,3 +12,6 @@ serde_json = { workspace = true }
 anyhow = { workspace = true }
 tempfile = { workspace = true }
 jiff = { workspace = true }
+toml = "0.8"
+image = { version = "0.25", default-features = false, features = ["png"] }
+image-compare = "0.4"

@@ -401,6 +401,10 @@ pub struct ServoEngine {
     pending_hide: std::cell::RefCell<HashSet<WebViewId>>,
     /// Port of the remote debugging server started with Servo, if any.
     devtools_port: Option<u16>,
+    /// Content processes not attributed to any open web view.
+    unowned_pids: HashSet<u32>,
+    /// Processes still to appear for web views closed before theirs did.
+    orphan_births: usize,
 }
 
 impl ServoEngine {
@@ -496,6 +500,8 @@ impl ServoEngine {
             shown: None,
             navigation_filter: Rc::new(std::cell::RefCell::new(None)),
             surface_size: None,
+            unowned_pids: HashSet::new(),
+            orphan_births: 0,
             devtools_port,
             view_sizes: HashMap::new(),
             frame_ready: Rc::new(std::cell::Cell::new(true)),
@@ -629,17 +635,28 @@ impl ServoEngine {
                 });
             }
         }
+        self.unowned_pids.retain(|p| alive.contains(p));
         let mut new: Vec<u32> = alive
             .into_iter()
-            .filter(|p| !self.pids.contains_key(p))
+            .filter(|p| !self.pids.contains_key(p) && !self.unowned_pids.contains(p))
             .collect();
         new.sort();
         for pid in new {
-            let Some(id) = self.awaiting_pid.pop_front() else {
-                break;
-            };
-            if self.views.contains_key(&id) {
-                self.pids.insert(pid, id);
+            // A web view closed before its process appeared still gets that
+            // process; it must not be credited to the next web view, or its
+            // exit reads as that tab crashing.
+            if self.orphan_births > 0 {
+                self.orphan_births -= 1;
+                self.unowned_pids.insert(pid);
+                continue;
+            }
+            match self.awaiting_pid.pop_front() {
+                Some(id) if self.views.contains_key(&id) => {
+                    self.pids.insert(pid, id);
+                }
+                _ => {
+                    self.unowned_pids.insert(pid);
+                }
             }
         }
     }
@@ -716,8 +733,21 @@ impl Engine for ServoEngine {
             self.child_view.setHidden(true);
         }
         self.views.remove(&id);
+        if self.awaiting_pid.contains(&id) {
+            self.orphan_births += 1;
+        }
         self.awaiting_pid.retain(|w| *w != id);
-        self.pids.retain(|_, w| *w != id);
+        // The closed view's process may linger; keep it out of attribution.
+        let closed: Vec<u32> = self
+            .pids
+            .iter()
+            .filter(|(_, w)| **w == id)
+            .map(|(p, _)| *p)
+            .collect();
+        for pid in closed {
+            self.pids.remove(&pid);
+            self.unowned_pids.insert(pid);
+        }
         self.ping_state.remove(&id);
         self.framed.borrow_mut().remove(&id);
         self.pending_hide.borrow_mut().remove(&id);

@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use parity::{ram, wpt};
+use parity::{ram, topsites, wpt};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -25,6 +25,16 @@ enum Commands {
         #[arg(long)]
         out: PathBuf,
     },
+    Topsites {
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long)]
+        must_work: bool,
+        #[arg(long)]
+        profile_dir: Option<PathBuf>,
+        #[arg(long)]
+        limit: Option<usize>,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -46,6 +56,14 @@ fn main() -> anyhow::Result<()> {
             }
             std::fs::write(&out, &md)?;
             println!("{}", md);
+        }
+        Commands::Topsites {
+            out,
+            must_work,
+            profile_dir,
+            limit,
+        } => {
+            topsites::run_topsites_command(&out, must_work, profile_dir.as_deref(), limit)?;
         }
     }
     Ok(())
