@@ -1241,8 +1241,14 @@ mod js_value_tests {
     #[test]
     fn servo_evaluate_returns_json() {
         assert_eq!(js_value_to_json(JSValue::Number(2.0)), serde_json::json!(2));
-        assert_eq!(js_value_to_json(JSValue::Number(0.5)), serde_json::json!(0.5));
-        assert_eq!(js_value_to_json(JSValue::Undefined), serde_json::Value::Null);
+        assert_eq!(
+            js_value_to_json(JSValue::Number(0.5)),
+            serde_json::json!(0.5)
+        );
+        assert_eq!(
+            js_value_to_json(JSValue::Undefined),
+            serde_json::Value::Null
+        );
         let mut obj = HashMap::new();
         obj.insert(
             "a".to_string(),
