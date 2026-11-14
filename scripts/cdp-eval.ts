@@ -53,4 +53,3 @@ if (method) {
   else console.log(JSON.stringify(data));
 }
 ws.close();
-
