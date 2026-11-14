@@ -41,8 +41,13 @@ fn make_login_data(
     db_path
 }
 
+/// Both tests below change WREN_CHROME_SAFE_STORAGE_KEY_HEX; tests run in
+/// parallel threads, so they take this lock.
+static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[test]
 fn chrome_decrypts_v10() {
+    let _env = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let key = [0x11u8; 16];
     let blob = build_v10_blob("pw123", &key);
     let out = creds::chrome::decrypt_v10(&blob, &key).unwrap();
@@ -69,6 +74,7 @@ fn chrome_decrypts_v10() {
 
 #[test]
 fn chrome_import_without_key_errors() {
+    let _env = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let dir = TempDir::new().unwrap();
     let blob = b"v10notrealciphertextpadding".to_vec();
     let _db = make_login_data(&dir, "https://example.com/", "alice", &blob);

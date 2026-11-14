@@ -60,6 +60,7 @@ pub fn content_process_token(args: &[String]) -> Option<String> {
 pub fn content_process_main() -> Option<()> {
     let args: Vec<String> = std::env::args().collect();
     let token = content_process_token(&args)?;
+    crate::memory_relief::start_relief_thread();
     // If the browser process dies without shutting Servo down (crash, SIGKILL),
     // this process is re-parented to launchd. Exit instead of lingering.
     let parent = std::os::unix::process::parent_id();
@@ -1014,6 +1015,18 @@ impl Engine for ServoEngine {
             }
         }
         rows
+    }
+
+    fn minimize_memory(&mut self) {
+        if self._servo.is_none() {
+            return;
+        }
+        // Servo 0.8 exposes no embedder API for JS GC, per-webview GC, or a
+        // global memory-pressure/minimize message. Clear network caches as the
+        // available lever; JS/layout/image cache minimization requires a Servo
+        // patch.
+        self.servo().network_manager().clear_cache();
+        crate::memory_relief::relief_now();
     }
 
     fn drain_events(&mut self) -> Vec<EngineEvent> {

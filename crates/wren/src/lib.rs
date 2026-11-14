@@ -3,6 +3,7 @@ pub mod app;
 pub mod cli;
 pub mod downloads;
 pub mod layout;
+pub mod memory_pressure;
 pub mod open_in_chrome;
 pub mod screenshot;
 pub mod task_manager;

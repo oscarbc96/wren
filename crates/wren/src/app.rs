@@ -159,6 +159,11 @@ pub fn run_with_args(args: Args) {
                             )
                         };
                         view.set_devtools_state(devtools_port, Some(settings_file));
+                        if settings_for_win.memory.pressure_response
+                            && let Some(src) = crate::memory_pressure::DispatchPressureSource::new()
+                        {
+                            view.set_pressure_source(Box::new(src));
+                        }
                         view
                     })
                 }

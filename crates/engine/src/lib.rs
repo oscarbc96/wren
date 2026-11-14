@@ -2,6 +2,7 @@
 
 pub mod api;
 pub mod fake;
+pub mod memory_relief;
 mod servo_engine;
 
 pub use api::*;
