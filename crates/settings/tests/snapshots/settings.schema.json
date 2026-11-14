@@ -20,7 +20,9 @@
       "$ref": "#/$defs/TabSettings",
       "default": {
         "new_tab_url": "about:blank",
-        "closed_stack": 25
+        "closed_stack": 25,
+        "sleep_after_minutes": 30,
+        "memory_budget_mb": 2048
       }
     }
   },
@@ -55,6 +57,18 @@
           "format": "uint",
           "minimum": 0,
           "default": 25
+        },
+        "sleep_after_minutes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 30
+        },
+        "memory_budget_mb": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 2048
         }
       }
     }

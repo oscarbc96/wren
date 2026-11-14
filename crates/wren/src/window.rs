@@ -11,7 +11,7 @@ use gpui::{
 };
 use settings::Settings;
 use store::Store;
-use tabs::{TabId, TabStrip};
+use tabs::{TabId, TabState, TabStrip};
 use url::Url;
 
 use crate::toolbar::ToolbarState;
@@ -32,9 +32,11 @@ pub struct BrowserWindow<E: Engine + 'static, S: Store + 'static> {
     pub suggestions: Vec<omnibox::Suggestion>,
     pub password_picker: Option<Vec<creds::Credential>>,
     pub password_status: Option<String>,
+    pub tab_menu: Option<TabId>,
     content_origin: Point<Pixels>,
     last_save: Option<Instant>,
     dirty_since: Option<Instant>,
+    last_sleep_check: Option<Instant>,
     shutting_down: bool,
 }
 
@@ -145,12 +147,14 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
             suggestions: Vec::new(),
             password_picker: None,
             password_status: None,
+            tab_menu: None,
             content_origin: Point {
                 x: px(0.),
                 y: px(0.),
             },
             last_save: None,
             dirty_since: None,
+            last_sleep_check: Some(Instant::now()),
             shutting_down: false,
         }
     }
@@ -293,6 +297,76 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
             let _ = self.store.save_session(&self.strip.snapshot());
             self.dirty_since = None;
             self.last_save = Some(Instant::now());
+        }
+
+        if self
+            .last_sleep_check
+            .map(|t| t.elapsed() >= Duration::from_secs(60))
+            .unwrap_or(true)
+        {
+            self.last_sleep_check = Some(Instant::now());
+            let now = jiff::Timestamp::now();
+            let after =
+                jiff::SignedDuration::from_secs(self.settings.tabs.sleep_after_minutes as i64 * 60);
+            for id in self.strip.sleep_candidates(now, after) {
+                self.strip.sleep(&mut self.engine, id);
+            }
+
+            let budget_bytes = self
+                .settings
+                .tabs
+                .memory_budget_mb
+                .saturating_mul(1024 * 1024);
+            if budget_bytes > 0
+                && let Ok(mut sys) = sysinfo::System::new()
+            {
+                sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+                let me = sysinfo::Pid::from_u32(std::process::id());
+                let mut total = 0u64;
+                if let Some(p) = sys.process(me) {
+                    total = p.memory();
+                }
+                // include direct children (content processes)
+                for p in sys.processes().values() {
+                    if p.parent() == Some(me) {
+                        total = total.saturating_add(p.memory());
+                    }
+                }
+                if total > budget_bytes {
+                    // Sleep oldest eligible background tabs until under budget or none left.
+                    loop {
+                        if total <= budget_bytes {
+                            break;
+                        }
+                        let candidate = self
+                            .strip
+                            .tabs()
+                            .iter()
+                            .filter(|t| {
+                                self.strip.active() != Some(t.id)
+                                    && !t.pinned
+                                    && !t.audible
+                                    && t.state != TabState::Slept
+                            })
+                            .min_by_key(|t| t.last_active)
+                            .map(|t| t.id);
+                        let Some(id) = candidate else {
+                            break;
+                        };
+                        self.strip.sleep(&mut self.engine, id);
+                        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+                        total = 0u64;
+                        if let Some(p) = sys.process(me) {
+                            total = p.memory();
+                        }
+                        for p in sys.processes().values() {
+                            if p.parent() == Some(me) {
+                                total = total.saturating_add(p.memory());
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -468,13 +542,67 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
     }
 
     fn render_chrome(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        div()
+        let mut col = div()
             .flex()
             .flex_col()
             .w_full()
             .h(px(self.toolbar.chrome_height()))
-            .child(self.render_tab_strip(cx))
-            .child(self.render_toolbar(cx))
+            .child(self.render_tab_strip(cx));
+        if let Some(menu_id) = self.tab_menu {
+            let pinned = self
+                .strip
+                .tabs()
+                .iter()
+                .find(|t| t.id == menu_id)
+                .map(|t| t.pinned)
+                .unwrap_or(false);
+            col = col.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .px(px(8.))
+                    .h(px(24.))
+                    .child(
+                        div()
+                            .id("tab-menu-pin")
+                            .cursor_pointer()
+                            .on_click(cx.listener(
+                                move |this: &mut Self, _: &ClickEvent, _window, _cx| {
+                                    if let Some(t) =
+                                        this.strip.tabs_mut().iter_mut().find(|t| t.id == menu_id)
+                                    {
+                                        t.pinned = !t.pinned;
+                                    }
+                                    this.tab_menu = None;
+                                },
+                            ))
+                            .child(if pinned { "Unpin" } else { "Pin" }),
+                    )
+                    .child(
+                        div()
+                            .id("tab-menu-sleep")
+                            .cursor_pointer()
+                            .on_click(cx.listener(
+                                move |this: &mut Self, _: &ClickEvent, _window, _cx| {
+                                    this.strip.sleep(&mut this.engine, menu_id);
+                                    this.tab_menu = None;
+                                },
+                            ))
+                            .child("Sleep"),
+                    )
+                    .child(
+                        div()
+                            .id("tab-menu-close")
+                            .cursor_pointer()
+                            .on_click(cx.listener(|this: &mut Self, _: &ClickEvent, _w, _cx| {
+                                this.tab_menu = None;
+                            }))
+                            .child("Dismiss"),
+                    ),
+            );
+        }
+        col.child(self.render_toolbar(cx))
     }
 
     fn render_tab_strip(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -492,6 +620,7 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
             } else {
                 truncate_text(&tab.title, 24)
             };
+            let is_slept = tab.state == TabState::Slept;
             children.push(
                 div()
                     .id(("tab", i))
@@ -503,9 +632,27 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
                     .rounded_lg()
                     .cursor_pointer()
                     .when(selected, |style| style.bg(gpui::white()))
+                    .when(is_slept, |style| style.opacity(0.5))
                     .on_click(
                         cx.listener(move |this: &mut Self, _: &ClickEvent, _window, _cx| {
-                            this.strip.activate(id);
+                            let slept = this
+                                .strip
+                                .tabs()
+                                .iter()
+                                .find(|t| t.id == id)
+                                .map(|t| t.state == TabState::Slept)
+                                .unwrap_or(false);
+                            if slept {
+                                this.strip.wake(&mut this.engine, id);
+                            } else {
+                                this.strip.activate(id);
+                            }
+                        }),
+                    )
+                    .on_mouse_down(
+                        gpui::MouseButton::Right,
+                        cx.listener(move |this: &mut Self, _: &MouseDownEvent, _window, _cx| {
+                            this.tab_menu = Some(id);
                         }),
                     )
                     .child(label)
