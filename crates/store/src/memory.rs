@@ -30,6 +30,7 @@ struct Inner {
     fail_next: bool,
     downloads: Vec<crate::DownloadRow>,
     next_download_id: i64,
+    extensions: Vec<crate::ExtensionRow>,
 }
 
 pub struct MemoryStore {
@@ -281,6 +282,56 @@ impl Store for MemoryStore {
             row.total = total;
             row.state = state;
         }
+        Ok(())
+    }
+
+    fn upsert_extension(
+        &self,
+        id: &str,
+        version: &str,
+        manifest_json: &str,
+        path: &str,
+        enabled: bool,
+    ) -> Result<()> {
+        let mut g = self.inner.lock().unwrap();
+        let row = crate::ExtensionRow {
+            id: id.to_string(),
+            version: version.to_string(),
+            manifest_json: manifest_json.to_string(),
+            path: path.to_string(),
+            enabled,
+        };
+        if let Some(existing) = g.extensions.iter_mut().find(|e| e.id == id) {
+            *existing = row;
+        } else {
+            g.extensions.push(row);
+        }
+        Ok(())
+    }
+
+    fn list_extensions(&self) -> Result<Vec<crate::ExtensionRow>> {
+        let g = self.inner.lock().unwrap();
+        let mut v = g.extensions.clone();
+        v.sort_by(|a, b| a.id.cmp(&b.id));
+        Ok(v)
+    }
+
+    fn get_extension(&self, id: &str) -> Result<Option<crate::ExtensionRow>> {
+        let g = self.inner.lock().unwrap();
+        Ok(g.extensions.iter().find(|e| e.id == id).cloned())
+    }
+
+    fn set_extension_enabled(&self, id: &str, enabled: bool) -> Result<()> {
+        let mut g = self.inner.lock().unwrap();
+        if let Some(e) = g.extensions.iter_mut().find(|e| e.id == id) {
+            e.enabled = enabled;
+        }
+        Ok(())
+    }
+
+    fn remove_extension(&self, id: &str) -> Result<()> {
+        let mut g = self.inner.lock().unwrap();
+        g.extensions.retain(|e| e.id != id);
         Ok(())
     }
 }
