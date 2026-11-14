@@ -1,6 +1,8 @@
 //! In-memory `Engine` implementation used by tests.
 
-use crate::api::{Engine, EngineEvent, EngineInput, RequestFilter, ViewRect, WebViewId};
+use crate::api::{
+    Engine, EngineEvent, EngineInput, NavigationFilter, RequestFilter, ViewRect, WebViewId,
+};
 use url::Url;
 
 /// One recorded call made to a `FakeEngine`.
@@ -16,17 +18,19 @@ pub enum FakeCall {
     Hide { id: WebViewId },
     Input(WebViewId, EngineInput),
     RunScript { id: WebViewId, js: String },
+    SetNavigationFilter,
     Spin,
     SetRequestFilter,
     DrainEvents,
 }
 
 /// Fake engine recording calls and replaying pushed events.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct FakeEngine {
     next_id: u64,
     pending: Vec<EngineEvent>,
     calls: Vec<FakeCall>,
+    navigation_filter: Option<NavigationFilter>,
 }
 
 impl FakeEngine {
@@ -91,6 +95,11 @@ impl Engine for FakeEngine {
             id,
             js: js.to_string(),
         });
+    }
+
+    fn set_navigation_filter(&mut self, f: NavigationFilter) {
+        self.navigation_filter = Some(f);
+        self.calls.push(FakeCall::SetNavigationFilter);
     }
 
     fn spin(&mut self) {

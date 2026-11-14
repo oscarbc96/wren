@@ -481,6 +481,7 @@ impl TabStrip {
                     self.changed_flag = true;
                 }
             }
+            EngineEvent::NavigationDenied { .. } => {}
         }
     }
 

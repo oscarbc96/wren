@@ -25,6 +25,12 @@
         "memory_budget_mb": 2048
       }
     },
+    "sites": {
+      "$ref": "#/$defs/SitesSettings",
+      "default": {
+        "open_in_chrome": []
+      }
+    },
     "adblock": {
       "$ref": "#/$defs/AdblockSettings",
       "default": {
@@ -75,6 +81,18 @@
           "format": "uint64",
           "minimum": 0,
           "default": 2048
+        }
+      }
+    },
+    "SitesSettings": {
+      "type": "object",
+      "properties": {
+        "open_in_chrome": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
         }
       }
     },

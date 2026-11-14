@@ -67,7 +67,8 @@ impl RootView {
                 EngineEvent::Crashed { reason, .. } => println!("CRASHED {reason}"),
                 EngineEvent::History { .. }
                 | EngineEvent::OpenTab { .. }
-                | EngineEvent::Audible { .. } => {}
+                | EngineEvent::Audible { .. }
+                | EngineEvent::NavigationDenied { .. } => {}
             }
         }
 

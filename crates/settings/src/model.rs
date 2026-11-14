@@ -100,6 +100,12 @@ impl Default for TabSettings {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Default)]
+#[serde(default)]
+pub struct SitesSettings {
+    pub open_in_chrome: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct AdblockSettings {
@@ -119,5 +125,6 @@ pub struct Settings {
     pub search: SearchSettings,
     pub startup: StartupSettings,
     pub tabs: TabSettings,
+    pub sites: SitesSettings,
     pub adblock: AdblockSettings,
 }

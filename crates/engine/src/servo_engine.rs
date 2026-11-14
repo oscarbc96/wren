@@ -1,8 +1,8 @@
 //! Servo-backed `Engine` implementation.
 
 use crate::api::{
-    Engine, EngineEvent, EngineInput, LoadState, Modifiers, MouseButton, RequestFilter,
-    RequestKind, ViewRect, WebViewId,
+    Engine, EngineEvent, EngineInput, LoadState, Modifiers, MouseButton, NavigationFilter,
+    RequestFilter, RequestKind, ViewRect, WebViewId,
 };
 use anyhow::{Context, Result};
 use dpi::PhysicalSize;
@@ -15,9 +15,9 @@ use raw_window_handle::{
 };
 use servo::{
     CreateNewWebViewRequest, EventLoopWaker, InputEvent, LoadStatus, MouseButtonAction,
-    MouseButtonEvent, MouseLeftViewportEvent, MouseMoveEvent, Opts, RenderingContext, Servo,
-    ServoBuilder, WebView, WebViewBuilder, WebViewDelegate, WheelDelta, WheelEvent, WheelMode,
-    WindowRenderingContext,
+    MouseButtonEvent, MouseLeftViewportEvent, MouseMoveEvent, NavigationRequest, Opts,
+    RenderingContext, Servo, ServoBuilder, WebView, WebViewBuilder, WebViewDelegate, WheelDelta,
+    WheelEvent, WheelMode, WindowRenderingContext,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::rc::Rc;
@@ -197,6 +197,7 @@ impl EventQueue {
 struct Delegate {
     id: WebViewId,
     events: EventQueue,
+    navigation_filter: Rc<std::cell::RefCell<Option<NavigationFilter>>>,
     filter: std::rc::Rc<std::cell::RefCell<Option<RequestFilter>>>,
 }
 
@@ -256,6 +257,23 @@ impl WebViewDelegate for Delegate {
             url: Url::parse("about:blank").expect("valid url"),
         });
         drop(request);
+    }
+
+    fn request_navigation(&self, _webview: WebView, request: NavigationRequest) {
+        let url = request.url.clone();
+        let allowed = self
+            .navigation_filter
+            .borrow()
+            .as_ref()
+            .map(|f| f(&url))
+            .unwrap_or(true);
+        if allowed {
+            request.allow();
+        } else {
+            request.deny();
+            self.events
+                .push(EngineEvent::NavigationDenied { id: self.id, url });
+        }
     }
 
     fn load_web_resource(&self, _webview: WebView, load: servo::WebResourceLoad) {
@@ -330,6 +348,7 @@ pub struct ServoEngine {
     next_id: u64,
     events: EventQueue,
     shown: Option<WebViewId>,
+    navigation_filter: Rc<std::cell::RefCell<Option<NavigationFilter>>>,
     request_filter: std::rc::Rc<std::cell::RefCell<Option<RequestFilter>>>,
 }
 
@@ -393,6 +412,7 @@ impl ServoEngine {
             next_id: 0,
             events: EventQueue::default(),
             shown: None,
+            navigation_filter: Rc::new(std::cell::RefCell::new(None)),
             request_filter: std::rc::Rc::new(std::cell::RefCell::new(None)),
         })
     }
@@ -502,6 +522,7 @@ impl Engine for ServoEngine {
         let delegate = Rc::new(Delegate {
             id,
             events: self.events.clone(),
+            navigation_filter: self.navigation_filter.clone(),
             filter: self.request_filter.clone(),
         });
         let webview = WebViewBuilder::new(self.servo(), self.rendering_context.clone())
@@ -618,6 +639,10 @@ impl Engine for ServoEngine {
         if let Some(entry) = self.views.get(&id) {
             entry.webview.evaluate_javascript(js, |_| {});
         }
+    }
+
+    fn set_navigation_filter(&mut self, f: NavigationFilter) {
+        *self.navigation_filter.borrow_mut() = Some(f);
     }
 
     fn spin(&mut self) {
