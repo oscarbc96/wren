@@ -2,21 +2,20 @@
 import type { GetStaticPaths } from "astro";
 import ChangelogRoute from "@/components/ChangelogRoute.astro";
 import { defaultLocale } from "@/i18n";
-import { getPendingRelease, getReleasePages } from "@/lib/github";
+import { getReleasePages } from "@/lib/github";
 
 export const prerender = true;
 
 export const getStaticPaths = (async () => {
   const pages = await getReleasePages();
-  const pending = await getPendingRelease();
   const total = Math.max(pages.length, 1);
   return Array.from({ length: total }, (_, i) => ({
     params: { page: i === 0 ? undefined : String(i + 1) },
-    props: { page: i + 1, total, entries: pages[i] ?? [], pending },
+    props: { page: i + 1, total, entries: pages[i] ?? [] },
   }));
 }) satisfies GetStaticPaths;
 
-const { page, total, entries, pending } = Astro.props;
+const { page, total, entries } = Astro.props;
 ---
 
-<ChangelogRoute locale={defaultLocale} page={page} total={total} entries={entries} pending={pending} />
+<ChangelogRoute locale={defaultLocale} page={page} total={total} entries={entries} />

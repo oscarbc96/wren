@@ -1,0 +1,8 @@
+{
+  "version": "0.3.0",
+  "subjects": [
+    "feat(app): fixture pending feature (#1)",
+    "fix(app): fixture pending fix (#2)",
+    "chore: skipped chore"
+  ]
+}

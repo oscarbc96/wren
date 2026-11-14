@@ -2,13 +2,11 @@ name: Pages
 
 on:
   push:
+    # Every push: the changelog's "Unreleased" section reads main's commits.
     branches: [main]
-    paths:
-      - "site/**"
-      - ".github/workflows/pages.yml"
   release:
     types: [published, edited, deleted]
-  # The pending release notes come from the release-please PR, which changes on
+  # The unreleased notes come from the release-please PR, which changes on
   # every push to main; rebuild once that workflow finishes. Releases created
   # with GITHUB_TOKEN do not fire `release`, so this covers them too.
   workflow_run:

@@ -37,9 +37,13 @@ export interface Ui {
     empty: string;
     emptyText: string;
     prerelease: string;
-    pending: string;
-    unreleased: string;
-    viewPr: string;
+    unreleased: {
+      heading: string;
+      badge: string;
+      /** `{version}` is replaced by the proposed version. */
+      version: string;
+      note: string;
+    };
     newer: string;
     older: string;
     /** BCP 47 tag used to format dates. */
