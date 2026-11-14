@@ -163,6 +163,9 @@ fn store_download_without_publisher_proof_rejected() {
     let dir = TempDir::new().unwrap();
     let dest = dir.path().join("ext");
     let err = verify_and_unpack(&crx, &dest, Policy::RequirePublisher).unwrap_err();
-    assert!(matches!(err, extensions::crx::CrxError::MissingPublisherProof));
+    assert!(matches!(
+        err,
+        extensions::crx::CrxError::MissingPublisherProof
+    ));
     assert!(!dest.exists());
 }
