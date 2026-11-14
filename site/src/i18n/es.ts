@@ -64,9 +64,12 @@ export const es: Ui = {
     emptyText:
       "Aún no se ha publicado nada. Las versiones aparecerán aquí en cuanto salga la primera.",
     prerelease: "Versión preliminar",
-    pending: "Próxima versión",
-    unreleased: "Sin publicar",
-    viewPr: "Ver la pull request de la versión",
+    unreleased: {
+      heading: "Sin publicar",
+      badge: "Aún sin publicar",
+      version: "Versión propuesta {version}",
+      note: "Estos cambios están en la rama main y todavía no forman parte de ninguna versión. Pueden cambiar antes de que salga la siguiente.",
+    },
     newer: "Más recientes",
     older: "Anteriores",
     dateLocale: "es-ES",

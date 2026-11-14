@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { githubReleases } from "@fumadocs/changelog/github";
 import type { GitHubChangelogEntry } from "@fumadocs/changelog/github";
-import { type PendingRelease, parsePendingRelease } from "./pending";
+import { fromCommits, parseReleasePr, type Unreleased } from "./unreleased";
 
 /**
  * Build-time GitHub data (releases, stars). Nothing here may fail the build:
@@ -75,48 +75,82 @@ export function getReleasePages(): Promise<GitHubChangelogEntry[][]> {
   });
 }
 
-async function fetchPending(): Promise<PendingRelease | undefined> {
-  const fixture = process.env.WREN_PENDING_FIXTURE;
-  try {
-    let prs: unknown;
-    if (fixture) {
-      prs = JSON.parse(await readFile(fixture, "utf8"));
-    } else if (fixture === "") {
-      return undefined;
-    } else {
-      const headers = new Headers({ accept: "application/vnd.github+json" });
-      if (token) headers.set("authorization", `Bearer ${token}`);
-      const res = await fetch(
-        `https://api.github.com/repos/${owner}/${repo}/issues?labels=${encodeURIComponent("autorelease: pending")}&state=open&per_page=5`,
-        { headers },
-      );
-      if (!res.ok) {
-        warn(`pending release unavailable (HTTP ${res.status})`);
-        return undefined;
-      }
-      prs = await res.json();
-    }
-    if (!Array.isArray(prs)) return undefined;
-    // The issues endpoint also lists plain issues; only PRs count.
-    const pr = prs.find(
-      (item) =>
-        typeof item === "object" &&
-        item !== null &&
-        (fixture || "pull_request" in item),
-    );
-    return parsePendingRelease(pr);
-  } catch (error) {
-    warn("could not load the pending release", error);
-    return undefined;
-  }
+function apiHeaders(): Headers {
+  const headers = new Headers({ accept: "application/vnd.github+json" });
+  if (token) headers.set("authorization", `Bearer ${token}`);
+  return headers;
 }
 
-let pending: Promise<PendingRelease | undefined> | undefined;
+async function api<T>(path: string): Promise<T | undefined> {
+  const res = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}${path}`,
+    {
+      headers: apiHeaders(),
+    },
+  );
+  if (!res.ok) {
+    warn(`${path} unavailable (HTTP ${res.status})`);
+    return undefined;
+  }
+  return (await res.json()) as T;
+}
 
-/** The open release-please PR as a pending release, `undefined` when none or on any failure. */
-export function getPendingRelease(): Promise<PendingRelease | undefined> {
-  pending ??= fetchPending();
-  return pending;
+interface UnreleasedFixture {
+  version?: string;
+  subjects?: string[];
+}
+
+async function fetchUnreleased(): Promise<Unreleased | undefined> {
+  const fixture = process.env.WREN_UNRELEASED_FIXTURE;
+  if (fixture) {
+    const raw = JSON.parse(
+      await readFile(fixture, "utf8"),
+    ) as UnreleasedFixture;
+    const found = fromCommits(raw.subjects ?? [], repoUrl);
+    return found ? { ...found, version: raw.version } : undefined;
+  }
+  // Other fixtures mean an offline, deterministic build.
+  if (process.env.WREN_CHANGELOG_FIXTURE || process.env.WREN_STARS_FIXTURE)
+    return undefined;
+
+  // 1. The open release-please PR carries the proposed version and notes.
+  const pending = await api<
+    {
+      title?: string;
+      body?: string;
+      html_url?: string;
+      pull_request?: unknown;
+    }[]
+  >("/issues?state=open&labels=autorelease%3A%20pending&per_page=5");
+  const pr = pending?.find((issue) => issue.pull_request);
+  if (pr) {
+    const parsed = parseReleasePr(pr);
+    if (parsed) return parsed;
+  }
+
+  // 2. Otherwise the Conventional Commits on main since the latest release.
+  const latest = (
+    await api<{ tag_name?: string; draft?: boolean }[]>("/releases?per_page=5")
+  )?.find((release) => !release.draft && release.tag_name);
+  if (!latest?.tag_name) return undefined;
+  const compare = await api<{ commits?: { commit: { message: string } }[] }>(
+    `/compare/${encodeURIComponent(latest.tag_name)}...main`,
+  );
+  const subjects = (compare?.commits ?? []).map(
+    (c) => c.commit.message.split("\n")[0] ?? "",
+  );
+  return fromCommits(subjects, repoUrl);
+}
+
+let unreleased: Promise<Unreleased | undefined> | undefined;
+
+/** Pending changes for the top of the changelog; `undefined` when none or on any failure. */
+export function getUnreleased(): Promise<Unreleased | undefined> {
+  unreleased ??= fetchUnreleased().catch((error) => {
+    warn("could not load the unreleased changes", error);
+    return undefined;
+  });
+  return unreleased;
 }
 
 /** `1234` as `1.2k`, `999` as `999`. */
@@ -138,10 +172,8 @@ async function fetchStars(): Promise<number | undefined> {
   }
   if (fixture === "") return undefined;
   try {
-    const headers = new Headers({ accept: "application/vnd.github+json" });
-    if (token) headers.set("authorization", `Bearer ${token}`);
     const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
-      headers,
+      headers: apiHeaders(),
     });
     if (!res.ok) {
       warn(`star count unavailable (HTTP ${res.status})`);

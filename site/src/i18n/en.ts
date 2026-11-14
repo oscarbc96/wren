@@ -63,9 +63,12 @@ export const en: Ui = {
     emptyText:
       "Nothing has been published yet. Releases will appear here as soon as the first one ships.",
     prerelease: "Pre-release",
-    pending: "Pending release",
-    unreleased: "Unreleased",
-    viewPr: "View the release pull request",
+    unreleased: {
+      heading: "Unreleased",
+      badge: "Not released yet",
+      version: "Proposed version {version}",
+      note: "These changes are on the main branch and are not in a release yet. They may change before the next version ships.",
+    },
     newer: "Newer",
     older: "Older",
     dateLocale: "en-US",

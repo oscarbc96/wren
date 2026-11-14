@@ -27,7 +27,7 @@
       // --force; the keyed value would otherwise change on every run.
       "env": [
         "WREN_CHANGELOG_FIXTURE",
-        "WREN_PENDING_FIXTURE",
+        "WREN_UNRELEASED_FIXTURE",
         "WREN_STARS_FIXTURE"
       ],
       "passThroughEnv": ["GITHUB_TOKEN"]
@@ -48,7 +48,7 @@
       "outputs": ["dist-tests/**"],
       "env": [
         "WREN_CHANGELOG_FIXTURE",
-        "WREN_PENDING_FIXTURE",
+        "WREN_UNRELEASED_FIXTURE",
         "WREN_STARS_FIXTURE"
       ],
       "passThroughEnv": ["GITHUB_TOKEN"]

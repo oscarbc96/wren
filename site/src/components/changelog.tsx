@@ -32,61 +32,65 @@ export interface ChangelogLabels {
   /** BCP 47 tag used to format dates */
   dateLocale: string;
   prerelease: string;
-  pending: string;
-  unreleased: string;
-  viewPr: string;
   newer: string;
   older: string;
 }
 
-export interface PendingTimelineEntry {
+export interface UnreleasedLabels {
+  heading: string;
+  badge: string;
+  /** `{version}` is replaced by the proposed version. */
   version: string;
-  url: string;
-  content: string;
+  note: string;
 }
 
-/** The unmerged release-please PR: no date, a clear "unreleased" badge. */
-export function PendingRelease({
-  entry,
+/** Pending changes, clearly marked as not released yet. */
+export function UnreleasedSection({
+  notes,
+  version,
+  url,
   labels,
 }: {
-  entry: PendingTimelineEntry;
-  labels: ChangelogLabels;
+  notes: string;
+  version?: string;
+  url?: string;
+  labels: UnreleasedLabels;
 }) {
   return (
     <section
-      data-testid="changelog-pending"
+      data-testid="changelog-unreleased"
       className="rounded-xl border border-dashed border-fd-primary/50 bg-fd-card p-6"
     >
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <span className="inline-flex items-center gap-1 rounded-md border border-fd-primary/40 bg-fd-primary/10 px-1.5 py-0.5 text-xs font-medium text-fd-primary">
           <ClockIcon className="size-3" aria-hidden="true" />
-          {labels.unreleased}
+          {labels.badge}
         </span>
-        <span className="rounded-md border bg-fd-secondary px-1.5 py-0.5 font-mono text-xs text-fd-secondary-foreground">
-          {entry.version}
-        </span>
+        {version && (
+          <span className="rounded-md border bg-fd-secondary px-1.5 py-0.5 font-mono text-xs text-fd-secondary-foreground">
+            {labels.version.replace("{version}", version)}
+          </span>
+        )}
       </div>
-      <h2 className="mb-4 font-semibold">
-        <a href={entry.url} className="hover:text-fd-primary">
-          {labels.pending} {entry.version}
-        </a>
+      <h2 className="font-semibold">
+        {url ? (
+          <a href={url} className="hover:text-fd-primary">
+            {labels.heading}
+          </a>
+        ) : (
+          labels.heading
+        )}
       </h2>
-      {entry.content && (
-        <div className="prose prose-sm text-fd-muted-foreground">
-          <Suspense>
-            <Markdown async components={mdxComponents}>
-              {entry.content}
-            </Markdown>
-          </Suspense>
-        </div>
-      )}
-      <a
-        href={entry.url}
-        className="mt-4 inline-block text-sm text-fd-primary hover:underline"
-      >
-        {labels.viewPr}
-      </a>
+      <p className="mt-1 mb-4 text-sm text-fd-muted-foreground">
+        {labels.note}
+      </p>
+      <div className="prose prose-sm text-fd-muted-foreground">
+        <Suspense>
+          <Markdown async components={mdxComponents}>
+            {notes}
+          </Markdown>
+        </Suspense>
+      </div>
     </section>
   );
 }

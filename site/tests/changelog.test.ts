@@ -5,8 +5,8 @@ import { buildSite } from "./build";
 const withReleases = "dist-tests/changelog";
 const empty = "dist-tests/changelog-empty";
 const offline = "dist-tests/changelog-offline";
-const pending = "dist-tests/changelog-pending";
-const pendingOnly = "dist-tests/changelog-pending-only";
+const unreleased = "dist-tests/changelog-unreleased";
+const unreleasedOnly = "dist-tests/changelog-unreleased-only";
 
 beforeAll(async () => {
   rmSync("dist-tests", { recursive: true, force: true });
@@ -24,14 +24,14 @@ beforeAll(async () => {
       WREN_CHANGELOG_FIXTURE: "tests/fixtures/missing.json",
       WREN_STARS_FIXTURE: "none",
     }),
-    buildSite(pending, {
+    buildSite(unreleased, {
       WREN_CHANGELOG_FIXTURE: "tests/fixtures/releases.json",
-      WREN_PENDING_FIXTURE: "tests/fixtures/pending.json",
+      WREN_UNRELEASED_FIXTURE: "tests/fixtures/unreleased.json",
       WREN_STARS_FIXTURE: "none",
     }),
-    buildSite(pendingOnly, {
+    buildSite(unreleasedOnly, {
       WREN_CHANGELOG_FIXTURE: "tests/fixtures/no-releases.json",
-      WREN_PENDING_FIXTURE: "tests/fixtures/pending.json",
+      WREN_UNRELEASED_FIXTURE: "tests/fixtures/unreleased.json",
       WREN_STARS_FIXTURE: "none",
     }),
   ]);
@@ -75,46 +75,43 @@ describe("changelog from a fixture", () => {
   });
 });
 
-describe("pending release", () => {
-  test("shows the release-please PR above the releases", async () => {
-    const html = await read(pending, "changelog/index.html");
-    expect(html).toContain('data-testid="changelog-pending"');
-    expect(html).toContain("Pending release");
+describe("unreleased section", () => {
+  test("shows pending changes above the releases, marked as not released", async () => {
+    const html = await read(unreleased, "changelog/index.html");
+    expect(html).toContain('data-testid="changelog-unreleased"');
     expect(html).toContain("Unreleased");
-    expect(html).toContain("0.3.0");
-    expect(html).toContain("pending fixture feature");
-    expect(html).toContain("pending fixture fix");
-    expect(html).toContain("https://github.com/example/wren-fixture/pull/42");
-    expect(html.indexOf("Pending release")).toBeLessThan(
+    expect(html).toContain("Proposed version 0.3.0");
+    expect(html).toContain("fixture pending feature");
+    expect(html).toContain("fixture pending fix");
+    expect(html).not.toContain("skipped chore");
+    expect(html.indexOf("fixture pending feature")).toBeLessThan(
       html.indexOf("Wren 0.1.0"),
     );
-    expect(html).not.toContain("beep");
-    expect(html).not.toContain("generated with");
   });
 
   test("spanish chrome is translated", async () => {
-    const html = await read(pending, "es/changelog/index.html");
-    expect(html).toContain("Próxima versión");
+    const html = await read(unreleased, "es/changelog/index.html");
     expect(html).toContain("Sin publicar");
-    expect(html).toContain("pending fixture feature");
+    expect(html).toContain("Versión propuesta 0.3.0");
+    expect(html).toContain("fixture pending feature");
   });
 
-  test("absent without a pending PR", async () => {
+  test("absent without unreleased data", async () => {
     const html = await read(withReleases, "changelog/index.html");
-    expect(html).not.toContain('data-testid="changelog-pending"');
+    expect(html).not.toContain('data-testid="changelog-unreleased"');
   });
 
-  test("a pending release alone replaces the empty state", async () => {
-    const html = await read(pendingOnly, "changelog/index.html");
-    expect(html).toContain('data-testid="changelog-pending"');
+  test("unreleased changes alone replace the empty state", async () => {
+    const html = await read(unreleasedOnly, "changelog/index.html");
+    expect(html).toContain('data-testid="changelog-unreleased"');
     expect(html).not.toContain('data-testid="changelog-empty"');
   });
 
   test("stays out of the atom feed", async () => {
-    const xml = await read(pending, "changelog/atom.xml");
+    const xml = await read(unreleased, "changelog/atom.xml");
     expect(xml).toContain("Wren 0.1.0");
     expect(xml).not.toContain("0.3.0");
-    expect(xml).not.toContain("pending fixture");
+    expect(xml).not.toContain("fixture pending");
   });
 });
 
