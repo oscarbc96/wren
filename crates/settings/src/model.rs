@@ -100,6 +100,12 @@ impl Default for TabSettings {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Default)]
+#[serde(default)]
+pub struct SitesSettings {
+    pub open_in_chrome: Vec<String>,
+}
+
 /// All user-visible settings.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
@@ -107,4 +113,5 @@ pub struct Settings {
     pub search: SearchSettings,
     pub startup: StartupSettings,
     pub tabs: TabSettings,
+    pub sites: SitesSettings,
 }

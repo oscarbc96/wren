@@ -2,5 +2,6 @@
 {
   "search": { "url": "https://duckduckgo.com/?q={query}" },
   "startup": { "restore_session": true },
-  "tabs": { "new_tab_url": "about:blank", "closed_stack": 25 }
+  "tabs": { "new_tab_url": "about:blank", "closed_stack": 25 },
+  "sites": { "open_in_chrome": [] }
 }

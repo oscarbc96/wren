@@ -1,6 +1,8 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use crate::open_in_chrome::{self, Opener, SystemOpener};
+
 use engine::{
     Engine, EngineEvent, EngineInput, LoadState, Modifiers, MouseButton, ViewRect, WebViewId,
 };
@@ -21,6 +23,7 @@ pub struct BrowserWindow<E: Engine + 'static, S: Store + 'static> {
     pub engine: E,
     pub store: Arc<S>,
     pub cred_store: Arc<dyn creds::CredStore + Send + Sync>,
+    pub opener: Arc<dyn Opener + Send + Sync>,
     pub settings: Settings,
     pub strip: TabStrip,
     pub toolbar: ToolbarState,
@@ -32,6 +35,7 @@ pub struct BrowserWindow<E: Engine + 'static, S: Store + 'static> {
     pub suggestions: Vec<omnibox::Suggestion>,
     pub password_picker: Option<Vec<creds::Credential>>,
     pub password_status: Option<String>,
+    pub site_notice: Option<String>,
     pub tab_menu: Option<TabId>,
     content_origin: Point<Pixels>,
     last_save: Option<Instant>,
@@ -48,9 +52,21 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
     }
 
     pub fn new_with_creds(
+        engine: E,
+        store: Arc<S>,
+        cred_store: Arc<dyn creds::CredStore + Send + Sync>,
+        settings: Settings,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let opener: Arc<dyn Opener + Send + Sync> = Arc::new(SystemOpener);
+        Self::new_with_creds_and_opener(engine, store, cred_store, opener, settings, cx)
+    }
+
+    pub fn new_with_creds_and_opener(
         mut engine: E,
         store: Arc<S>,
         cred_store: Arc<dyn creds::CredStore + Send + Sync>,
+        opener: Arc<dyn Opener + Send + Sync>,
         settings: Settings,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -70,7 +86,7 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
         } else {
             strip.open(&mut engine, &new_tab_url, true);
         }
-        Self::finish(engine, store, cred_store, settings, strip, cx)
+        Self::finish(engine, store, cred_store, opener, settings, strip, cx)
     }
 
     /// Opens one tab per URL, the first one active, without a leading blank tab.
@@ -87,9 +103,22 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
     }
 
     pub fn with_urls_and_creds(
+        engine: E,
+        store: Arc<S>,
+        cred_store: Arc<dyn creds::CredStore + Send + Sync>,
+        settings: Settings,
+        urls: Vec<Url>,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let opener: Arc<dyn Opener + Send + Sync> = Arc::new(SystemOpener);
+        Self::with_urls_and_opener(engine, store, cred_store, opener, settings, urls, cx)
+    }
+
+    pub fn with_urls_and_opener(
         mut engine: E,
         store: Arc<S>,
         cred_store: Arc<dyn creds::CredStore + Send + Sync>,
+        opener: Arc<dyn Opener + Send + Sync>,
         settings: Settings,
         urls: Vec<Url>,
         cx: &mut Context<Self>,
@@ -104,17 +133,23 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
                 strip.open(&mut engine, url, i == 0);
             }
         }
-        Self::finish(engine, store, cred_store, settings, strip, cx)
+        Self::finish(engine, store, cred_store, opener, settings, strip, cx)
     }
 
     fn finish(
-        engine: E,
+        mut engine: E,
         store: Arc<S>,
         cred_store: Arc<dyn creds::CredStore + Send + Sync>,
+        opener: Arc<dyn Opener + Send + Sync>,
         settings: Settings,
         strip: TabStrip,
         cx: &mut Context<Self>,
     ) -> Self {
+        let rules = settings.sites.open_in_chrome.clone();
+        engine.set_navigation_filter(Box::new(move |url| {
+            !open_in_chrome::rule_matches(&rules, url)
+        }));
+
         let focus_handle = cx.focus_handle();
         let content_focus_handle = cx.focus_handle();
         let text = strip
@@ -136,6 +171,7 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
             engine,
             store,
             cred_store,
+            opener,
             settings,
             strip,
             toolbar: ToolbarState::new(),
@@ -147,6 +183,7 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
             suggestions: Vec::new(),
             password_picker: None,
             password_status: None,
+            site_notice: None,
             tab_menu: None,
             content_origin: Point {
                 x: px(0.),
@@ -157,6 +194,13 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
             last_sleep_check: Some(Instant::now()),
             shutting_down: false,
         }
+    }
+
+    fn apply_navigation_filter(&mut self) {
+        let rules = self.settings.sites.open_in_chrome.clone();
+        self.engine.set_navigation_filter(Box::new(move |url| {
+            !open_in_chrome::rule_matches(&rules, url)
+        }));
     }
 
     pub fn active_webview(&self) -> Option<WebViewId> {
@@ -384,6 +428,9 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
                     .record_visit(&tab.url, &tab.title, jiff::Timestamp::now());
             }
         }
+        if let EngineEvent::NavigationDenied { url, .. } = ev {
+            self.open_external(url.clone());
+        }
         self.strip.apply(&mut self.engine, ev);
         if let Some(tab) = self.active_tab().cloned() {
             self.toolbar.url_text = tab.url.to_string();
@@ -396,6 +443,37 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
         }
         if self.strip.changed() {
             self.sync_omnibox_text();
+        }
+    }
+
+    fn open_external(&mut self, url: Url) {
+        if let Err(msg) = self.opener.open(&url) {
+            self.site_notice = Some(msg);
+        }
+    }
+
+    pub fn open_active_in_chrome(&mut self) {
+        if let Some(tab) = self.active_tab().cloned() {
+            self.open_external(tab.url);
+        }
+    }
+
+    pub fn always_open_active_in_chrome(&mut self) {
+        if let Some(tab) = self.active_tab().cloned() {
+            if let Some(host) = tab.url.host_str() {
+                let host = host.to_ascii_lowercase();
+                if !self
+                    .settings
+                    .sites
+                    .open_in_chrome
+                    .iter()
+                    .any(|h| h == &host)
+                {
+                    self.settings.sites.open_in_chrome.push(host);
+                    self.apply_navigation_filter();
+                }
+            }
+            self.open_external(tab.url);
         }
     }
 
@@ -794,6 +872,28 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
                     )
                     .child(
                         div()
+                            .id("open-in-chrome")
+                            .cursor_pointer()
+                            .on_click(cx.listener(
+                                |this: &mut Self, _: &ClickEvent, _window, _cx| {
+                                    this.open_active_in_chrome();
+                                },
+                            ))
+                            .child("Chrome"),
+                    )
+                    .child(
+                        div()
+                            .id("always-open-in-chrome")
+                            .cursor_pointer()
+                            .on_click(cx.listener(
+                                |this: &mut Self, _: &ClickEvent, _window, _cx| {
+                                    this.always_open_active_in_chrome();
+                                },
+                            ))
+                            .child("Always open this site in Chrome"),
+                    )
+                    .child(
+                        div()
                             .id("url-display")
                             .flex_1()
                             .px(px(8.))
@@ -811,7 +911,7 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
                             .w(px(140.))
                             .text_sm()
                             .text_color(theme.text)
-                            .child(title),
+                            .child(self.site_notice.clone().unwrap_or(title)),
                     ),
             )
             .when(!suggestions.is_empty(), |d| {
@@ -1287,6 +1387,16 @@ impl<E: Engine + 'static, S: Store + 'static> Render for BrowserWindow<E, S> {
                         "CSV import: provide a path via settings/import action (not wired in UI)"
                             .to_string(),
                     );
+                },
+            ))
+            .on_action(cx.listener(
+                |this: &mut Self, _: &crate::actions::OpenInChrome, _window, _cx| {
+                    this.open_active_in_chrome();
+                },
+            ))
+            .on_action(cx.listener(
+                |this: &mut Self, _: &crate::actions::AlwaysOpenInChrome, _window, _cx| {
+                    this.always_open_active_in_chrome();
                 },
             ))
     }

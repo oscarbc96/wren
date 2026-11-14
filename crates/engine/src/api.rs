@@ -46,7 +46,14 @@ pub enum EngineEvent {
         id: WebViewId,
         playing: bool,
     },
+    NavigationDenied {
+        id: WebViewId,
+        url: Url,
+    },
 }
+
+/// Filter for navigations: return `false` to deny.
+pub type NavigationFilter = Box<dyn Fn(&Url) -> bool>;
 
 /// Rectangle in points for showing a web view.
 #[derive(Debug, Clone, PartialEq)]
@@ -121,6 +128,7 @@ pub trait Engine {
     fn hide(&mut self, id: WebViewId);
     fn input(&mut self, _id: WebViewId, _ev: EngineInput) {}
     fn run_script(&mut self, _id: WebViewId, _js: &str) {}
+    fn set_navigation_filter(&mut self, _f: NavigationFilter) {}
     fn spin(&mut self);
     fn drain_events(&mut self) -> Vec<EngineEvent>;
     fn shutdown(&mut self) {}
