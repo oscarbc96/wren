@@ -2390,6 +2390,7 @@ dependencies = [
  "anyhow",
  "content-security-policy",
  "dpi",
+ "euclid",
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",
@@ -2397,6 +2398,7 @@ dependencies = [
  "reqwest",
  "servo",
  "sysinfo 0.40.3",
+ "tabs",
  "url",
 ]
 
@@ -10716,6 +10718,9 @@ name = "themes"
 version = "0.1.0"
 dependencies = [
  "gpui-ce",
+ "objc2 0.6.5",
+ "objc2-app-kit 0.3.2",
+ "objc2-foundation 0.3.2",
  "serde",
  "serde_json",
  "serde_json_lenient",
@@ -12999,13 +13004,17 @@ dependencies = [
  "adblock_rules",
  "anyhow",
  "clap",
+ "core-graphics 0.24.0",
  "creds",
  "dirs 7.0.0",
  "engine",
+ "foreign-types",
  "gpui-ce",
  "gpui_ce_platform",
+ "image",
  "jiff",
  "objc2 0.6.5",
+ "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",
  "omnibox",
  "proc-macro2",

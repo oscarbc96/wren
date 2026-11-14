@@ -36,6 +36,18 @@
       "default": {
         "enabled": true
       }
+    },
+    "downloads": {
+      "$ref": "#/$defs/DownloadsSettings",
+      "default": {
+        "dir": "/Users/oscarblancocastan/Downloads"
+      }
+    },
+    "hang": {
+      "$ref": "#/$defs/HangSettings",
+      "default": {
+        "timeout_seconds": 5
+      }
     }
   },
   "$defs": {
@@ -102,6 +114,26 @@
         "enabled": {
           "type": "boolean",
           "default": true
+        }
+      }
+    },
+    "DownloadsSettings": {
+      "type": "object",
+      "properties": {
+        "dir": {
+          "type": "string",
+          "default": "/Users/oscarblancocastan/Downloads"
+        }
+      }
+    },
+    "HangSettings": {
+      "type": "object",
+      "properties": {
+        "timeout_seconds": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 5
         }
       }
     }

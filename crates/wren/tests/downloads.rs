@@ -8,7 +8,7 @@ use std::time::Duration;
 use engine::{EngineEvent, FakeEngine};
 use gpui::TestAppContext;
 use settings::Settings;
-use store::MemoryStore;
+use store::{MemoryStore, Store};
 use url::Url;
 
 use wren::window::BrowserWindow;

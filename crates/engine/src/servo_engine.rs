@@ -2,7 +2,7 @@
 
 use crate::api::{
     Engine, EngineEvent, EngineInput, LoadState, Modifiers, MouseButton, NavigationFilter,
-    RequestFilter, RequestKind, ViewRect, WebViewId,
+    ProcessInfo, RequestFilter, RequestKind, ViewRect, WebViewId,
 };
 use anyhow::{Context, Result};
 use dpi::PhysicalSize;
@@ -214,9 +214,16 @@ struct Delegate {
     events: EventQueue,
     navigation_filter: Rc<std::cell::RefCell<Option<NavigationFilter>>>,
     filter: std::rc::Rc<std::cell::RefCell<Option<RequestFilter>>>,
+    frame_ready: Rc<std::cell::Cell<bool>>,
+    framed: Rc<std::cell::RefCell<HashSet<WebViewId>>>,
 }
 
 impl WebViewDelegate for Delegate {
+    fn notify_new_frame_ready(&self, _webview: WebView) {
+        self.frame_ready.set(true);
+        self.framed.borrow_mut().insert(self.id);
+    }
+
     fn notify_url_changed(&self, _webview: WebView, url: Url) {
         self.events
             .push(EngineEvent::UrlChanged { id: self.id, url });
@@ -347,6 +354,14 @@ struct WebViewEntry {
     webview: WebView,
 }
 
+#[derive(Clone)]
+struct PingState {
+    last_reply: Instant,
+    outstanding: bool,
+    last_sent: Instant,
+    hung_emitted: bool,
+}
+
 /// Servo-backed engine.
 ///
 /// Runs Servo in multiprocess mode: every web view is its own browsing
@@ -375,6 +390,15 @@ pub struct ServoEngine {
     shown: Option<WebViewId>,
     navigation_filter: Rc<std::cell::RefCell<Option<NavigationFilter>>>,
     request_filter: std::rc::Rc<std::cell::RefCell<Option<RequestFilter>>>,
+    hang_timeout: Duration,
+    ping_state: HashMap<WebViewId, PingState>,
+    surface_size: Option<PhysicalSize<u32>>,
+    view_sizes: HashMap<WebViewId, PhysicalSize<u32>>,
+    frame_ready: Rc<std::cell::Cell<bool>>,
+    /// Web views that have produced at least one frame.
+    framed: Rc<std::cell::RefCell<HashSet<WebViewId>>>,
+    /// Web views to hide once they have produced their first frame.
+    pending_hide: std::cell::RefCell<HashSet<WebViewId>>,
 }
 
 impl ServoEngine {
@@ -407,8 +431,21 @@ impl ServoEngine {
         let raw_dh = RawDisplayHandle::AppKit(AppKitDisplayHandle::new());
         let safe_dh = unsafe { raw_window_handle::DisplayHandle::borrow_raw(raw_dh) };
         let safe_wh = unsafe { raw_window_handle::WindowHandle::borrow_raw(raw_child_wh) };
+        // Start at the parent's real pixel size: WebRender sizes some
+        // resources from the initial surface, and a 1x1 start paints blank.
+        let initial_size = {
+            let b = parent_view.bounds();
+            let scale = parent_view
+                .window()
+                .map(|w| w.backingScaleFactor())
+                .unwrap_or(2.0);
+            PhysicalSize::new(
+                ((b.size.width * scale).round() as u32).max(1),
+                ((b.size.height * scale).round() as u32).max(1),
+            )
+        };
         let rendering_context = Rc::new(
-            WindowRenderingContext::new(safe_dh, safe_wh, PhysicalSize::new(1, 1))
+            WindowRenderingContext::new(safe_dh, safe_wh, initial_size)
                 .map_err(|e| anyhow::anyhow!("failed to create rendering context: {e:?}"))?,
         );
         let _ = rendering_context.make_current();
@@ -423,12 +460,13 @@ impl ServoEngine {
             .build();
         servo.setup_logging();
 
+        let now = Instant::now();
         Ok(Self {
             _servo: Some(servo),
             sys: System::new().context("process table")?,
             pids: HashMap::new(),
             awaiting_pid: VecDeque::new(),
-            last_scan: Instant::now(),
+            last_scan: now,
             lost_process: false,
             rendering_context,
             parent_view,
@@ -438,7 +476,14 @@ impl ServoEngine {
             events: EventQueue::default(),
             shown: None,
             navigation_filter: Rc::new(std::cell::RefCell::new(None)),
+            surface_size: None,
+            view_sizes: HashMap::new(),
+            frame_ready: Rc::new(std::cell::Cell::new(true)),
+            framed: Rc::new(std::cell::RefCell::new(HashSet::new())),
+            pending_hide: std::cell::RefCell::new(HashSet::new()),
             request_filter: std::rc::Rc::new(std::cell::RefCell::new(None)),
+            hang_timeout: Duration::from_secs(5),
+            ping_state: HashMap::new(),
         })
     }
 
@@ -450,11 +495,56 @@ impl ServoEngine {
         v
     }
 
+    pub fn set_hang_timeout(&mut self, secs: u64) {
+        self.hang_timeout = Duration::from_secs(secs.max(1));
+    }
+
+    fn pid_for_view(&self, id: WebViewId) -> Option<u32> {
+        self.pids
+            .iter()
+            .find_map(|(pid, vid)| if *vid == id { Some(*pid) } else { None })
+    }
+
+    fn check_hangs(&mut self) {
+        let now = Instant::now();
+        let ids: Vec<WebViewId> = self.views.keys().copied().collect();
+        for id in ids {
+            let state = self.ping_state.entry(id).or_insert_with(|| PingState {
+                last_reply: now,
+                outstanding: false,
+                last_sent: now - Duration::from_secs(10),
+                hung_emitted: false,
+            });
+            if state.outstanding {
+                if !state.hung_emitted && now.duration_since(state.last_reply) > self.hang_timeout {
+                    self.events.push(EngineEvent::Hung { id });
+                    state.hung_emitted = true;
+                }
+            } else if now.duration_since(state.last_sent) >= Duration::from_secs(1)
+                && let Some(entry) = self.views.get(&id)
+            {
+                let events = self.events.clone();
+                entry.webview.evaluate_javascript("0", move |_| {
+                    events.push(EngineEvent::Responsive { id });
+                });
+                let st = self.ping_state.entry(id).or_insert_with(|| PingState {
+                    last_reply: now,
+                    outstanding: false,
+                    last_sent: now,
+                    hung_emitted: false,
+                });
+                st.outstanding = true;
+                st.last_sent = now;
+            }
+        }
+    }
+
     /// Shuts Servo down (content processes exit), then kills any child that
     /// is still alive. Call before quitting; `Drop` calls it too.
     pub fn shutdown(&mut self) {
         self.views.clear();
         self.shown = None;
+        self.ping_state.clear();
         let Some(servo) = self._servo.take() else {
             return;
         };
@@ -541,6 +631,41 @@ impl ServoEngine {
     }
 }
 
+impl ServoEngine {
+    /// Hides a web view, or defers the hide until its first frame (Servo
+    /// 0.8 never paints a view hidden before that).
+    fn hide_view(&self, id: WebViewId) {
+        if !self.framed.borrow().contains(&id) {
+            self.pending_hide.borrow_mut().insert(id);
+            return;
+        }
+        if let Some(entry) = self.views.get(&id) {
+            entry.webview.hide();
+        }
+    }
+
+    /// Applies hides deferred by `hide_view` for views that now have a frame.
+    fn apply_pending_hides(&self) {
+        let ready: Vec<WebViewId> = {
+            let framed = self.framed.borrow();
+            self.pending_hide
+                .borrow()
+                .iter()
+                .copied()
+                .filter(|id| framed.contains(id))
+                .collect()
+        };
+        for id in ready {
+            self.pending_hide.borrow_mut().remove(&id);
+            if self.shown != Some(id)
+                && let Some(entry) = self.views.get(&id)
+            {
+                entry.webview.hide();
+            }
+        }
+    }
+}
+
 impl Engine for ServoEngine {
     fn create(&mut self, url: &Url) -> WebViewId {
         let id = self.alloc_id();
@@ -549,13 +674,17 @@ impl Engine for ServoEngine {
             events: self.events.clone(),
             navigation_filter: self.navigation_filter.clone(),
             filter: self.request_filter.clone(),
+            frame_ready: self.frame_ready.clone(),
+            framed: self.framed.clone(),
         });
         let webview = WebViewBuilder::new(self.servo(), self.rendering_context.clone())
             .url(url.clone())
             .delegate(delegate)
             .build();
         // Hide unless it becomes the shown view.
-        webview.hide();
+        // Servo 0.8 never paints a web view that was hidden before its first
+        // frame, so the hide waits for that frame (see `spin`).
+        self.pending_hide.borrow_mut().insert(id);
         self.views.insert(id, WebViewEntry { webview });
         self.awaiting_pid.push_back(id);
         id
@@ -569,6 +698,10 @@ impl Engine for ServoEngine {
         self.views.remove(&id);
         self.awaiting_pid.retain(|w| *w != id);
         self.pids.retain(|_, w| *w != id);
+        self.ping_state.remove(&id);
+        self.framed.borrow_mut().remove(&id);
+        self.pending_hide.borrow_mut().remove(&id);
+        self.view_sizes.remove(&id);
     }
 
     fn load(&mut self, id: WebViewId, url: &Url) {
@@ -599,9 +732,9 @@ impl Engine for ServoEngine {
         // Hide currently shown webview.
         if let Some(current) = self.shown
             && current != id
-            && let Some(entry) = self.views.get(&current)
+            && self.views.contains_key(&current)
         {
-            entry.webview.hide();
+            self.hide_view(current);
         }
 
         let parent_bounds = self.parent_view.bounds();
@@ -627,19 +760,34 @@ impl Engine for ServoEngine {
         let pw = (rect.width.max(1.0) * scale).round().max(1.0) as u32;
         let ph = (rect.height.max(1.0) * scale).round().max(1.0) as u32;
         let size = PhysicalSize::new(pw, ph);
-        self.rendering_context.resize(size);
+        // Resizing recreates the surfaces, so only do it when the size
+        // changes; doing it every tick presents blank surfaces.
+        let resized = self.surface_size != Some(size);
+        if resized {
+            self.rendering_context.resize(size);
+            self.surface_size = Some(size);
+            self.frame_ready.set(true);
+        }
 
         if let Some(entry) = self.views.get(&id) {
-            entry.webview.resize(size);
-            entry.webview.show();
+            if resized || self.shown != Some(id) || self.view_sizes.get(&id) != Some(&size) {
+                entry
+                    .webview
+                    .set_hidpi_scale_factor(euclid::Scale::new(scale));
+                entry.webview.resize(size);
+                self.view_sizes.insert(id, size);
+            }
+            self.pending_hide.borrow_mut().remove(&id);
+            if self.shown != Some(id) {
+                entry.webview.show();
+                self.frame_ready.set(true);
+            }
             self.shown = Some(id);
         }
     }
 
     fn hide(&mut self, id: WebViewId) {
-        if let Some(entry) = self.views.get(&id) {
-            entry.webview.hide();
-        }
+        self.hide_view(id);
         if self.shown == Some(id) {
             self.shown = None;
             self.child_view.setHidden(true);
@@ -676,20 +824,91 @@ impl Engine for ServoEngine {
         }
         self.servo().spin_event_loop();
         self.watch_children();
-        if let Some(id) = self.shown
+        self.apply_pending_hides();
+        self.check_hangs();
+        // Paint and present only when Servo has a new frame (or after a
+        // resize or tab switch); presenting without painting swaps in a
+        // stale or blank buffer.
+        if self.frame_ready.replace(false)
+            && let Some(id) = self.shown
             && let Some(entry) = self.views.get(&id)
         {
             entry.webview.paint();
+            self.rendering_context.present();
         }
-        self.rendering_context.present();
-    }
-
-    fn drain_events(&mut self) -> Vec<EngineEvent> {
-        self.events.drain()
     }
 
     fn set_request_filter(&mut self, f: RequestFilter) {
         *self.request_filter.borrow_mut() = Some(f);
+    }
+
+    fn kill(&mut self, id: WebViewId) {
+        if let Some(pid) = self.pid_for_view(id) {
+            let _ = std::process::Command::new("kill")
+                .arg("-9")
+                .arg(pid.to_string())
+                .status();
+        }
+    }
+
+    fn processes(&mut self) -> Vec<ProcessInfo> {
+        self.sys.refresh_processes(ProcessesToUpdate::All, true);
+        let mut out = Vec::new();
+        let me = Pid::from_u32(std::process::id());
+        if let Some(p) = self.sys.process(me) {
+            out.push(ProcessInfo {
+                id: None,
+                pid: std::process::id(),
+                rss_bytes: p.memory(),
+                cpu_percent: p.cpu_usage(),
+            });
+        } else {
+            out.push(ProcessInfo {
+                id: None,
+                pid: std::process::id(),
+                rss_bytes: 0,
+                cpu_percent: 0.0,
+            });
+        }
+        let pairs = self.content_pids();
+        for (id, pid) in pairs {
+            if let Some(p) = self.sys.process(Pid::from_u32(pid)) {
+                out.push(ProcessInfo {
+                    id: Some(id),
+                    pid,
+                    rss_bytes: p.memory(),
+                    cpu_percent: p.cpu_usage(),
+                });
+            }
+        }
+        out
+    }
+
+    fn drain_events(&mut self) -> Vec<EngineEvent> {
+        let evs = self.events.drain();
+        let now = Instant::now();
+        // Ping replies arrive as `Responsive`; only a reply after `Hung` is
+        // reported, the rest just reset the watchdog.
+        let mut out = Vec::with_capacity(evs.len());
+        for ev in evs {
+            if let EngineEvent::Responsive { id } = ev {
+                let was_hung = match self.ping_state.get_mut(&id) {
+                    Some(st) => {
+                        let was = st.hung_emitted;
+                        st.outstanding = false;
+                        st.last_reply = now;
+                        st.hung_emitted = false;
+                        was
+                    }
+                    None => false,
+                };
+                if !was_hung {
+                    continue;
+                }
+            }
+            out.push(ev);
+        }
+        out
     }
 
     fn shutdown(&mut self) {

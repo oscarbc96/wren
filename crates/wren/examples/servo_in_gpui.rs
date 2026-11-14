@@ -69,7 +69,9 @@ impl RootView {
                 | EngineEvent::OpenTab { .. }
                 | EngineEvent::Audible { .. }
                 | EngineEvent::NavigationDenied { .. }
-                | EngineEvent::Download { .. } => {}
+                | EngineEvent::Download { .. }
+                | EngineEvent::Hung { .. }
+                | EngineEvent::Responsive { .. } => {}
             }
         }
 

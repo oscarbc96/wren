@@ -28,6 +28,7 @@ pub struct Tab {
     pub can_back: bool,
     pub can_forward: bool,
     pub crashed: Option<String>,
+    pub hung: bool,
     pub state: TabState,
     pub pinned: bool,
     pub audible: bool,
@@ -98,6 +99,7 @@ impl TabStrip {
             can_back: false,
             can_forward: false,
             crashed: None,
+            hung: false,
             state,
             pinned: false,
             audible: false,
@@ -248,6 +250,7 @@ impl TabStrip {
             can_back: false,
             can_forward: false,
             crashed: None,
+            hung: false,
             state: TabState::Active,
             pinned: false,
             audible: false,
@@ -412,6 +415,7 @@ impl TabStrip {
             }
             EngineEvent::Load { id, state } => {
                 if let Some(tab) = self.tabs.iter_mut().find(|t| t.webview == *id) {
+                    tab.hung = false;
                     match state {
                         engine::LoadState::Started => tab.loading = true,
                         engine::LoadState::Complete | engine::LoadState::Failed(_) => {
@@ -435,6 +439,7 @@ impl TabStrip {
             EngineEvent::Crashed { id, reason } => {
                 if let Some(tab) = self.tabs.iter_mut().find(|t| t.webview == *id) {
                     tab.crashed = Some(reason.clone());
+                    tab.hung = false;
                     tab.loading = false;
                     self.changed_flag = true;
                 }
@@ -458,6 +463,7 @@ impl TabStrip {
                     can_back: false,
                     can_forward: false,
                     crashed: None,
+                    hung: false,
                     state: TabState::Background,
                     pinned: false,
                     audible: false,
@@ -478,6 +484,18 @@ impl TabStrip {
             EngineEvent::Audible { id, playing } => {
                 if let Some(tab) = self.tabs.iter_mut().find(|t| t.webview == *id) {
                     tab.audible = *playing;
+                    self.changed_flag = true;
+                }
+            }
+            EngineEvent::Hung { id } => {
+                if let Some(tab) = self.tabs.iter_mut().find(|t| t.webview == *id) {
+                    tab.hung = true;
+                    self.changed_flag = true;
+                }
+            }
+            EngineEvent::Responsive { id } => {
+                if let Some(tab) = self.tabs.iter_mut().find(|t| t.webview == *id) {
+                    tab.hung = false;
                     self.changed_flag = true;
                 }
             }
@@ -519,6 +537,7 @@ impl TabStrip {
                 can_back: false,
                 can_forward: false,
                 crashed: None,
+                hung: false,
                 state,
                 pinned: false,
                 audible: false,

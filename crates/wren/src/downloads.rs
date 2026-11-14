@@ -5,7 +5,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
 use std::thread;
 
-use store::{DownloadState, Store};
 use url::Url;
 
 #[derive(Debug, Clone)]
@@ -88,35 +87,34 @@ pub fn suggested_name_from_url(url: &Url, suggested: Option<&str>) -> String {
         .path_segments()
         .and_then(|mut s| s.rfind(|x| !x.is_empty()))
     {
-        if !seg.is_empty() {
-            return seg.to_string();
-        }
+        return seg.to_string();
     }
     "download".to_string()
 }
 
+/// Bytes between two `Progress` messages.
+const PROGRESS_STEP: u64 = 256 * 1024;
+
+/// Fetches `url` into `path` on a background thread. The thread never
+/// touches the store: it reports through `tx` and the window records the
+/// result (the store is not shared across threads).
 pub fn start_download(
-    store: Arc<dyn Store + Send + Sync>,
+    id: i64,
     url: Url,
-    suggested_name: Option<String>,
-    dir: PathBuf,
+    path: PathBuf,
     tx: mpsc::Sender<DownloadMsg>,
 ) -> DownloadHandle {
     let cancel = Arc::new(AtomicBool::new(false));
     let cancel_thread = cancel.clone();
-    let name = suggested_name_from_url(&url, suggested_name.as_deref());
-    let path = choose_path(&dir, &name);
-    let path_str = path.to_string_lossy().to_string();
-    let id = store
-        .record_download(url.as_str(), &path_str, 0, None, DownloadState::InProgress)
-        .unwrap_or(0);
     let _ = tx.send(DownloadMsg::Started {
         id,
-        path: path_str.clone(),
+        path: path.to_string_lossy().into_owned(),
         total: None,
     });
     thread::spawn(move || {
-        let result = (|| -> Result<(u64, Option<u64>), String> {
+        let mut bytes: u64 = 0;
+        let mut total: Option<u64> = None;
+        let result = (|| -> Result<(), String> {
             let client = reqwest::blocking::Client::builder()
                 .redirect(reqwest::redirect::Policy::limited(10))
                 .timeout(std::time::Duration::from_secs(300))
@@ -128,15 +126,15 @@ pub fn start_download(
                 .map_err(|e| e.to_string())?
                 .error_for_status()
                 .map_err(|e| e.to_string())?;
-            let total = resp.content_length();
+            total = resp.content_length();
             let mut file = File::create(&path).map_err(|e| e.to_string())?;
             let mut buf = [0u8; 16 * 1024];
-            let mut bytes: u64 = 0;
+            let mut last_report = 0u64;
             loop {
                 if cancel_thread.load(Ordering::SeqCst) {
                     drop(file);
                     let _ = fs::remove_file(&path);
-                    return Err("__cancelled__".to_string());
+                    return Err(CANCELLED.to_string());
                 }
                 let n = resp.read(&mut buf).map_err(|e| e.to_string())?;
                 if n == 0 {
@@ -144,35 +142,30 @@ pub fn start_download(
                 }
                 file.write_all(&buf[..n]).map_err(|e| e.to_string())?;
                 bytes += n as u64;
-                let _ = store.update_download(id, bytes, total, DownloadState::InProgress);
-                let _ = tx.send(DownloadMsg::Progress { id, bytes, total });
+                if bytes - last_report >= PROGRESS_STEP {
+                    last_report = bytes;
+                    let _ = tx.send(DownloadMsg::Progress { id, bytes, total });
+                }
             }
             file.flush().map_err(|e| e.to_string())?;
-            Ok((bytes, total))
+            Ok(())
         })();
-        match result {
-            Ok((bytes, total)) => {
-                let _ = store.update_download(id, bytes, total, DownloadState::Completed);
-                let _ = tx.send(DownloadMsg::Finished { id, bytes, total });
-            }
-            Err(e) if e == "__cancelled__" => {
-                let _ = store.update_download(id, 0, None, DownloadState::Cancelled);
-                let _ = tx.send(DownloadMsg::Cancelled {
+        let msg = match result {
+            Ok(()) => DownloadMsg::Finished { id, bytes, total },
+            Err(e) if e == CANCELLED => DownloadMsg::Cancelled { id, bytes, total },
+            Err(error) => {
+                let _ = fs::remove_file(&path);
+                DownloadMsg::Failed {
                     id,
-                    bytes: 0,
-                    total: None,
-                });
+                    bytes,
+                    total,
+                    error,
+                }
             }
-            Err(e) => {
-                let _ = store.update_download(id, 0, None, DownloadState::Failed);
-                let _ = tx.send(DownloadMsg::Failed {
-                    id,
-                    bytes: 0,
-                    total: None,
-                    error: e,
-                });
-            }
-        }
+        };
+        let _ = tx.send(msg);
     });
     DownloadHandle { id, cancel }
 }
+
+const CANCELLED: &str = "__cancelled__";

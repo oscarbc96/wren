@@ -11,6 +11,14 @@ pub struct Args {
     /// URLs to open.
     #[arg(value_name = "URL")]
     pub urls: Vec<String>,
+
+    /// Capture a screenshot of the window to this PNG path and quit.
+    #[arg(long)]
+    pub screenshot: Option<String>,
+
+    /// Delay in milliseconds before capturing the screenshot.
+    #[arg(long, default_value_t = 3000)]
+    pub screenshot_delay_ms: u64,
 }
 
 pub fn parse() -> Args {

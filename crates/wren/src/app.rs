@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use gpui::{App, AppContext, KeyBinding, WindowOptions};
+use gpui::{App, AppContext, KeyBinding, TitlebarOptions, WindowOptions, point, px};
 use gpui_platform::application;
 use raw_window_handle::HasWindowHandle;
 use settings::{ConfigPaths, SettingsStore};
@@ -13,6 +13,7 @@ use engine::Engine;
 
 use crate::actions;
 use crate::cli::Args;
+use crate::screenshot;
 use crate::window::BrowserWindow;
 
 pub fn run() {
@@ -72,6 +73,13 @@ pub fn run_with_args(args: Args) {
         .install_default()
         .ok();
 
+    let screenshot_out = args.screenshot.clone().map(PathBuf::from);
+    let screenshot_delay_ms = args.screenshot_delay_ms;
+    let screenshot_has_urls = !urls.is_empty();
+    let screenshot_view_ptr: Arc<std::sync::Mutex<Option<usize>>> =
+        Arc::new(std::sync::Mutex::new(None));
+    let screenshot_view_ptr_for_run = screenshot_view_ptr.clone();
+
     let app = application();
     app.run(move |cx: &mut App| {
         themes::init(cx);
@@ -80,36 +88,52 @@ pub fn run_with_args(args: Args) {
         let store_for_win = store.clone();
         let settings_for_win = settings.clone();
         let urls_for_win = urls.clone();
+        let window_options = WindowOptions {
+            titlebar: Some(
+                TitlebarOptions::default()
+                    .appears_transparent(true)
+                    .traffic_light_position(point(px(14.0), px(13.0))),
+            ),
+            ..Default::default()
+        };
         let handle = cx
-            .open_window(WindowOptions::default(), move |window, cx| {
-                let raw_wh = <gpui::Window as HasWindowHandle>::window_handle(window)
-                    .expect("raw window handle");
-                let waker: Arc<dyn Fn() + Send + Sync> = Arc::new(|| {});
-                let mut engine = engine::ServoEngine::new(raw_wh, waker).expect("servo engine");
-                if let Some(b) = &blocker {
-                    let b = b.clone();
-                    engine.set_request_filter(Box::new(move |url, source, kind| {
-                        b.should_block(url, source, kind)
-                    }));
-                }
-                cx.new(|cx| {
-                    if urls_for_win.is_empty() {
-                        BrowserWindow::new(
-                            engine,
-                            store_for_win.clone(),
-                            settings_for_win.clone(),
-                            cx,
-                        )
-                    } else {
-                        BrowserWindow::with_urls(
-                            engine,
-                            store_for_win.clone(),
-                            settings_for_win.clone(),
-                            urls_for_win.clone(),
-                            cx,
-                        )
+            .open_window(window_options, {
+                let screenshot_view_ptr = screenshot_view_ptr_for_run.clone();
+                move |window, cx| {
+                    let raw_wh = <gpui::Window as HasWindowHandle>::window_handle(window)
+                        .expect("raw window handle");
+                    let rwh = raw_wh.as_raw();
+                    if let raw_window_handle::RawWindowHandle::AppKit(h) = rwh {
+                        *screenshot_view_ptr.lock().unwrap() = Some(h.ns_view.as_ptr() as usize);
                     }
-                })
+                    let waker: Arc<dyn Fn() + Send + Sync> = Arc::new(|| {});
+                    let mut engine = engine::ServoEngine::new(raw_wh, waker).expect("servo engine");
+                    engine.set_hang_timeout(settings_for_win.hang.timeout_seconds);
+                    if let Some(b) = &blocker {
+                        let b = b.clone();
+                        engine.set_request_filter(Box::new(move |url, source, kind| {
+                            b.should_block(url, source, kind)
+                        }));
+                    }
+                    cx.new(|cx| {
+                        if urls_for_win.is_empty() {
+                            BrowserWindow::new(
+                                engine,
+                                store_for_win.clone(),
+                                settings_for_win.clone(),
+                                cx,
+                            )
+                        } else {
+                            BrowserWindow::with_urls(
+                                engine,
+                                store_for_win.clone(),
+                                settings_for_win.clone(),
+                                urls_for_win.clone(),
+                                cx,
+                            )
+                        }
+                    })
+                }
             })
             .expect("open window");
 
@@ -121,7 +145,11 @@ pub fn run_with_args(args: Args) {
             cx.quit();
         });
 
+        let screenshot_out_for_task = screenshot_out.clone();
+        let screenshot_view_ptr_for_task = screenshot_view_ptr.clone();
         cx.spawn(async move |cx| {
+            let mut seen_loading = false;
+            let start = std::time::Instant::now();
             loop {
                 cx.background_executor()
                     .timer(Duration::from_millis(8))
@@ -134,6 +162,47 @@ pub fn run_with_args(args: Args) {
                 if !ok {
                     break;
                 }
+                if let Some(out) = screenshot_out_for_task.clone() {
+                    let loading = handle
+                        .update(cx, |view, _window, _cx| view.toolbar.loading)
+                        .unwrap_or(false);
+                    if loading {
+                        seen_loading = true;
+                    }
+                    let elapsed = start.elapsed();
+                    let delay = Duration::from_millis(screenshot_delay_ms);
+                    let max = delay + Duration::from_secs(10);
+                    // If a URL was given, wait until loading finished at least once.
+                    let ready = if screenshot_has_urls {
+                        elapsed >= delay && (!loading && seen_loading)
+                    } else {
+                        elapsed >= delay
+                    };
+                    if ready || elapsed >= max {
+                        let ptr = *screenshot_view_ptr_for_task.lock().unwrap();
+                        let mut success = false;
+                        if let Some(p) = ptr {
+                            if let Some(wn) = screenshot::window_number_from_view(p as *mut _) {
+                                if screenshot::capture_window_png(wn, &out).is_ok() {
+                                    success = true;
+                                } else {
+                                    eprintln!("screenshot capture failed");
+                                }
+                            } else {
+                                eprintln!("could not resolve window number");
+                            }
+                        } else {
+                            eprintln!("window not ready");
+                        }
+                        if !success {
+                            std::process::exit(1);
+                        }
+                        break;
+                    }
+                }
+            }
+            if screenshot_out_for_task.is_some() {
+                std::process::exit(0);
             }
         })
         .detach();
@@ -175,6 +244,7 @@ fn register_actions(cx: &mut App) {
         KeyBinding::new("cmd-d", actions::Toggle, None),
         KeyBinding::new("cmd-shift-o", actions::OpenInChrome, None),
         KeyBinding::new("cmd-\\", actions::Fill, None),
+        KeyBinding::new("cmd-alt-escape", crate::task_manager::Toggle, None),
         KeyBinding::new("cmd-1", actions::Select1, None),
         KeyBinding::new("cmd-2", actions::Select2, None),
         KeyBinding::new("cmd-3", actions::Select3, None),
