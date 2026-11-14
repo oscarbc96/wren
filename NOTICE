@@ -20,6 +20,11 @@ Wren's CDP protocol layer adapts code from Obscura
 0d9a2f764ffdb097269da048002c593865e83a9e), licensed under Apache-2.0.
 Adapted files keep their Apache-2.0 header and a "Modified for Wren" line.
 
+The Chrome DevTools frontend is fetched at build time from
+https://chrome-devtools-frontend.appspot.com/ and is licensed under
+BSD-3-Clause; its LICENSE is copied into the fetched output directory by the
+fetch script.
+
 The full list of third-party crates and their licences is generated with
 `cargo about` and shipped with each release. Until then, run `cargo deny list`
 to see the licences in the dependency tree.

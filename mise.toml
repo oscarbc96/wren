@@ -69,6 +69,10 @@ run = [
   "echo 'WPT checkout ready; run servoshell/chrome manually, then: cargo run -p parity -- wpt-diff <servo.json> <chrome.json> --out docs/research/parity-wpt.md'",
 ]
 
+[tasks."devtools:fetch"]
+description = "Fetch the bundled Chrome DevTools frontend and verify it against the lock"
+run = "bun scripts/fetch-devtools-frontend.ts --verify"
+
 [tasks.lint]
 description = "Run every hk check on all files"
 run = "hk check --all"
