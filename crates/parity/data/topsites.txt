@@ -53,7 +53,7 @@ zoom.us
 slack.com
 notion.so
 figma.com
-canva.com
+canvas.com
 adobe.com
 cloudflare.com
 mozilla.org
