@@ -1,21 +1,31 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
+use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use cdp::backend::{BackendEvent, CdpBackend, CdpBackendFactory, CdpFailure, TargetInfo};
 use cdp::server::{CdpHandle, CdpServer};
-use engine::Engine;
+use engine::{ConsoleLevel, Engine, EngineEvent, LoadState, WebViewId};
 use serde_json::{Value, json};
 use tabs::{TabId, TabStrip};
 use tokio::sync::{broadcast, oneshot};
 use url::Url;
+
+pub(crate) const CALL_TIMEOUT: Duration = Duration::from_secs(30);
 
 struct CdpCommand {
     target_id: Option<String>,
     method: String,
     params: Value,
     reply: oneshot::Sender<Result<Value, CdpFailure>>,
+}
+
+struct PendingCall {
+    rx: std::sync::mpsc::Receiver<Result<Value, CdpFailure>>,
+    reply: Option<oneshot::Sender<Result<Value, CdpFailure>>>,
+    deadline: Instant,
+    target_id: Option<String>,
 }
 
 struct SharedState {
@@ -93,12 +103,25 @@ impl CdpBackendFactory for WrenCdpFactory {
     }
 }
 
+#[derive(Default, Clone)]
+pub(crate) struct TargetDomainState {
+    pub page_enabled: bool,
+    pub runtime_enabled: bool,
+    pub next_context_id: i64,
+    pub context_id: i64,
+    pub loader_id: String,
+    pub frame_url: String,
+    pub next_loader: u64,
+}
+
 pub struct CdpBridge {
     handle: Option<CdpHandle>,
     port: u16,
     cmd_rx: mpsc::Receiver<CdpCommand>,
     shared: Arc<SharedState>,
     known: HashMap<TabId, (String, String)>,
+    domains: HashMap<String, TargetDomainState>,
+    pending: Vec<PendingCall>,
 }
 
 impl CdpBridge {
@@ -123,6 +146,8 @@ impl CdpBridge {
             cmd_rx,
             shared,
             known: HashMap::new(),
+            domains: HashMap::new(),
+            pending: Vec::new(),
         })
     }
 
@@ -134,7 +159,7 @@ impl CdpBridge {
         self.shared.quit_requested.swap(false, Ordering::SeqCst)
     }
 
-    pub fn pump(&mut self, engine: &mut dyn Engine, tabs: &mut TabStrip) {
+    pub fn pump(&mut self, engine: &mut dyn Engine, tabs: &mut TabStrip, events: &[EngineEvent]) {
         // Apply attach state changes from cdp sessions
         let updates: Vec<(String, bool)> = {
             let mut u = self.shared.attached_updates.lock().unwrap();
@@ -148,8 +173,32 @@ impl CdpBridge {
 
         // Drain commands
         while let Ok(cmd) = self.cmd_rx.try_recv() {
-            let result = self.handle_call(engine, tabs, &cmd.target_id, &cmd.method, &cmd.params);
-            let _ = cmd.reply.send(result);
+            self.dispatch(engine, tabs, cmd);
+        }
+
+        // Map engine events to CDP domain events
+        self.emit_domain_events(tabs, events);
+
+        // Complete pending
+        let mut i = 0;
+        while i < self.pending.len() {
+            let mut done: Option<Result<Value, CdpFailure>> = None;
+            if let Ok(res) = self.pending[i].rx.try_recv() {
+                done = Some(res);
+            } else if Instant::now() >= self.pending[i].deadline {
+                done = Some(Err(CdpFailure {
+                    code: -32000,
+                    message: "timeout".to_string(),
+                }));
+            }
+            if let Some(res) = done {
+                let mut p = self.pending.remove(i);
+                if let Some(reply) = p.reply.take() {
+                    let _ = reply.send(res);
+                }
+            } else {
+                i += 1;
+            }
         }
 
         // Refresh targets cache and emit diff events
@@ -171,7 +220,6 @@ impl CdpBridge {
         }
         *self.shared.targets.lock().unwrap() = current_targets;
 
-        // Emit events
         let mut to_remove = Vec::new();
         for (id, (url, title)) in &self.known {
             if !current_map.contains_key(id) {
@@ -196,6 +244,7 @@ impl CdpBridge {
         }
         for id in to_remove {
             self.known.remove(&id);
+            self.domains.remove(&tab_to_target(id));
         }
         for (id, (url, title, attached)) in &current_map {
             if !self.known.contains_key(id) {
@@ -215,14 +264,191 @@ impl CdpBridge {
         }
     }
 
+    fn dispatch(&mut self, engine: &mut dyn Engine, tabs: &mut TabStrip, cmd: CdpCommand) {
+        match self.handle_call(
+            engine,
+            tabs,
+            cmd.target_id.clone(),
+            &cmd.method,
+            &cmd.params,
+        ) {
+            CallResult::Immediate(result) => {
+                let _ = cmd.reply.send(result);
+            }
+            CallResult::Async(rx) => {
+                self.pending.push(PendingCall {
+                    rx,
+                    reply: Some(cmd.reply),
+                    deadline: Instant::now() + CALL_TIMEOUT,
+                    target_id: cmd.target_id,
+                });
+            }
+        }
+    }
+
+    fn fail_pending_for_target(&mut self, target_id: &str, message: &str) {
+        let mut i = 0;
+        while i < self.pending.len() {
+            if self.pending[i].target_id.as_deref() == Some(target_id) {
+                let mut p = self.pending.remove(i);
+                if let Some(reply) = p.reply.take() {
+                    let _ = reply.send(Err(CdpFailure {
+                        code: -32000,
+                        message: message.to_string(),
+                    }));
+                }
+            } else {
+                i += 1;
+            }
+        }
+    }
+
+    pub(crate) fn emit_domain_events(&mut self, tabs: &TabStrip, events: &[EngineEvent]) {
+        let mut wv_to_target: HashMap<WebViewId, String> = HashMap::new();
+        for tab in tabs.tabs() {
+            wv_to_target.insert(tab.webview, tab_to_target(tab.id));
+        }
+        for ev in events {
+            match ev {
+                EngineEvent::Load { id, state } => {
+                    let Some(target_id) = wv_to_target.get(id).cloned() else {
+                        continue;
+                    };
+                    let st = self.domains.entry(target_id.clone()).or_default();
+                    if !st.page_enabled {
+                        continue;
+                    }
+                    match state {
+                        LoadState::Started => {
+                            st.next_loader += 1;
+                            st.loader_id = format!("loader-{}", st.next_loader);
+                            let loader = st.loader_id.clone();
+                            let fid = target_id.clone();
+                            self.send_domain(
+                                &target_id,
+                                "Page.frameStartedLoading",
+                                json!({"frameId": fid, "loaderId": loader}),
+                            );
+                        }
+                        LoadState::Complete => {
+                            let ts = 0.0;
+                            let loader = st.loader_id.clone();
+                            let fid = target_id.clone();
+                            self.send_domain(
+                                &target_id,
+                                "Page.domContentEventFired",
+                                json!({"timestamp": ts}),
+                            );
+                            self.send_domain(
+                                &target_id,
+                                "Page.loadEventFired",
+                                json!({"timestamp": ts}),
+                            );
+                            self.send_domain(&target_id, "Page.lifecycleEvent", json!({"frameId": fid, "loaderId": loader.clone(), "name":"DOMContentLoaded", "timestamp": ts}));
+                            self.send_domain(&target_id, "Page.lifecycleEvent", json!({"frameId": fid, "loaderId": loader.clone(), "name":"load", "timestamp": ts}));
+                            self.send_domain(&target_id, "Page.lifecycleEvent", json!({"frameId": fid, "loaderId": loader, "name":"networkIdle", "timestamp": ts}));
+                            self.send_domain(
+                                &target_id,
+                                "Page.frameStoppedLoading",
+                                json!({"frameId": target_id}),
+                            );
+                        }
+                        LoadState::Failed(_) => {
+                            self.send_domain(
+                                &target_id,
+                                "Page.frameStoppedLoading",
+                                json!({"frameId": target_id}),
+                            );
+                        }
+                    }
+                }
+                EngineEvent::UrlChanged { id, url } => {
+                    let Some(target_id) = wv_to_target.get(id).cloned() else {
+                        continue;
+                    };
+                    let (page_enabled, loader, runtime_enabled, ctx_id) = {
+                        let st = self.domains.entry(target_id.clone()).or_default();
+                        st.frame_url = url.to_string();
+                        let loader = if st.loader_id.is_empty() {
+                            "loader-0".to_string()
+                        } else {
+                            st.loader_id.clone()
+                        };
+                        if st.runtime_enabled {
+                            st.next_context_id += 1;
+                            st.context_id = st.next_context_id;
+                        }
+                        (st.page_enabled, loader, st.runtime_enabled, st.context_id)
+                    };
+                    if page_enabled {
+                        self.send_domain(&target_id, "Page.frameNavigated", json!({
+                            "frame": {"id": target_id, "loaderId": loader, "url": url.to_string(), "securityOrigin": url.origin().ascii_serialization(), "mimeType":"text/html"}
+                        }));
+                    }
+                    if runtime_enabled {
+                        self.send_domain(&target_id, "Runtime.executionContextsCleared", json!({}));
+                        self.send_domain(&target_id, "Runtime.executionContextCreated", json!({
+                            "context": {"id": ctx_id, "origin": url.to_string(), "name":"", "auxData": {"isDefault": true, "type":"default", "frameId": target_id}}
+                        }));
+                    }
+                }
+                EngineEvent::TitleChanged { .. } => {}
+                EngineEvent::Console { id, level, message } => {
+                    let Some(target_id) = wv_to_target.get(id).cloned() else {
+                        continue;
+                    };
+                    let st = self.domains.entry(target_id.clone()).or_default();
+                    if !st.runtime_enabled {
+                        continue;
+                    }
+                    let typ = match level {
+                        ConsoleLevel::Log => "log",
+                        ConsoleLevel::Info => "info",
+                        ConsoleLevel::Warn => "warning",
+                        ConsoleLevel::Error => "error",
+                        ConsoleLevel::Debug => "debug",
+                    };
+                    let ctx = st.context_id;
+                    self.send_domain(
+                        &target_id,
+                        "Runtime.consoleAPICalled",
+                        json!({
+                            "type": typ,
+                            "args": [{"type":"string","value": message}],
+                            "executionContextId": ctx,
+                            "timestamp": 0.0
+                        }),
+                    );
+                }
+                EngineEvent::Crashed { id, .. } => {
+                    let Some(target_id) = wv_to_target.get(id).cloned() else {
+                        continue;
+                    };
+                    // pending calls will be failed by engine reply Err("target crashed") in most cases,
+                    // but also fail any still waiting here.
+                    self.fail_pending_for_target(&target_id, "target crashed");
+                }
+                _ => {}
+            }
+        }
+    }
+
+    pub(crate) fn send_domain(&self, target_id: &str, method: &str, params: Value) {
+        let _ = self.shared.events_tx.send(BackendEvent::Domain {
+            target_id: target_id.to_string(),
+            method: method.to_string(),
+            params,
+        });
+    }
+
     fn handle_call(
-        &self,
+        &mut self,
         engine: &mut dyn Engine,
         tabs: &mut TabStrip,
-        _target_id: &Option<String>,
+        target_id: Option<String>,
         method: &str,
         params: &Value,
-    ) -> Result<Value, CdpFailure> {
+    ) -> CallResult {
         match method {
             "Target.createTarget" => {
                 let url_str = params
@@ -233,29 +459,71 @@ impl CdpBridge {
                     .or_else(|_| Url::parse(&format!("https://{url_str}")))
                     .unwrap_or_else(|_| Url::parse("about:blank").unwrap());
                 let id = tabs.open(engine, &url, true);
-                Ok(json!({"targetId": tab_to_target(id)}))
+                CallResult::Immediate(Ok(json!({"targetId": tab_to_target(id)})))
             }
             "Target.closeTarget" => {
                 let Some(tid) = params.get("targetId").and_then(|v| v.as_str()) else {
-                    return Err(CdpFailure {
+                    return CallResult::Immediate(Err(CdpFailure {
                         code: -32602,
                         message: "targetId required".to_string(),
-                    });
+                    }));
                 };
                 if let Some(id) = target_to_tab(tid) {
                     tabs.close(engine, id);
                 }
-                Ok(json!({"success": true}))
+                CallResult::Immediate(Ok(json!({"success": true})))
             }
             "Browser.close" => {
                 self.shared.quit_requested.store(true, Ordering::SeqCst);
-                Ok(json!({}))
+                CallResult::Immediate(Ok(json!({})))
             }
-            _ => Err(CdpFailure {
+            _ => {
+                let Some(tid) = target_id else {
+                    return CallResult::Immediate(Err(CdpFailure {
+                        code: -32601,
+                        message: format!("'{method}' wasn't found"),
+                    }));
+                };
+                self.handle_domain(engine, tabs, &tid, method, params)
+            }
+        }
+    }
+
+    fn handle_domain(
+        &mut self,
+        engine: &mut dyn Engine,
+        tabs: &mut TabStrip,
+        target_id: &str,
+        method: &str,
+        params: &Value,
+    ) -> CallResult {
+        let Some(tab) = target_to_tab(target_id)
+            .and_then(|id| tabs.tabs().iter().find(|t| t.id == id).cloned())
+        else {
+            return CallResult::Immediate(Err(CdpFailure {
+                code: -32000,
+                message: "target not found".to_string(),
+            }));
+        };
+        let domain = method.split('.').next().unwrap_or("");
+        match domain {
+            "Page" => {
+                crate::cdp_domains::page::handle(self, engine, &tab, target_id, method, params)
+            }
+            "Runtime" => {
+                crate::cdp_domains::runtime::handle(self, engine, &tab, target_id, method, params)
+            }
+            "Input" => crate::cdp_domains::input::handle(engine, &tab, method, params),
+            "Console" | "Log" => crate::cdp_domains::console::handle(method),
+            _ => CallResult::Immediate(Err(CdpFailure {
                 code: -32601,
                 message: format!("'{method}' wasn't found"),
-            }),
+            })),
         }
+    }
+
+    pub(crate) fn domain_state(&mut self, target_id: &str) -> &mut TargetDomainState {
+        self.domains.entry(target_id.to_string()).or_default()
     }
 }
 
@@ -278,4 +546,24 @@ pub fn target_to_tab(s: &str) -> Option<TabId> {
 /// The CDP port for this run: the CLI flag wins, then the setting when enabled.
 pub fn cdp_port(flag: Option<u16>, settings: &settings::CdpSettings) -> Option<u16> {
     flag.or_else(|| settings.enabled.then_some(settings.port))
+}
+
+pub(crate) enum CallResult {
+    Immediate(Result<Value, CdpFailure>),
+    Async(mpsc::Receiver<Result<Value, CdpFailure>>),
+}
+
+pub(crate) fn ok(v: Value) -> CallResult {
+    CallResult::Immediate(Ok(v))
+}
+
+pub(crate) fn err(code: i64, message: impl Into<String>) -> CallResult {
+    CallResult::Immediate(Err(CdpFailure {
+        code,
+        message: message.into(),
+    }))
+}
+
+pub(crate) fn method_not_found(method: &str) -> CallResult {
+    err(-32601, format!("'{method}' wasn't found"))
 }
