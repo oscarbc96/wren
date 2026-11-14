@@ -10,7 +10,7 @@ use crate::backend::{BackendEvent, CdpBackend, TargetInfo};
 use crate::types::{CdpEvent, CdpRequest, CdpResponse};
 
 pub struct SessionState {
-    sessions: HashMap<String, String>, // session_id -> target_id
+    pub(crate) sessions: HashMap<String, String>, // session_id -> target_id
     pub default_session: Option<String>,
     discover_targets: bool,
     auto_attach: bool,
@@ -123,7 +123,7 @@ pub async fn handle_target_browser(
             };
             let session_id = format!("session-{}", uuid::Uuid::new_v4());
             state.attach(&session_id, target_id);
-            // if autoAttach requested in future this is where; not specified in this call
+            backend.set_attached(target_id, true);
             out.push(
                 serde_json::to_value(CdpResponse::success(
                     req.id,
@@ -134,10 +134,24 @@ pub async fn handle_target_browser(
             );
         }
         "Target.detachFromTarget" => {
+            let mut detached_targets: Vec<String> = Vec::new();
             if let Some(sid) = params.get("sessionId").and_then(|v| v.as_str()) {
-                state.sessions.remove(sid);
+                if let Some(tid) = state.sessions.remove(sid) {
+                    detached_targets.push(tid);
+                }
             } else if let Some(tid) = params.get("targetId").and_then(|v| v.as_str()) {
-                state.sessions.retain(|_, v| v != tid);
+                let tid = tid.to_string();
+                let before = state.sessions.len();
+                state.sessions.retain(|_, v| v != &tid);
+                if state.sessions.len() != before {
+                    detached_targets.push(tid);
+                }
+            }
+            for tid in detached_targets {
+                let still = state.sessions.values().any(|v| v == &tid);
+                if !still {
+                    backend.set_attached(&tid, false);
+                }
             }
             out.push(
                 serde_json::to_value(CdpResponse::success(
@@ -159,6 +173,7 @@ pub async fn handle_target_browser(
                 for t in targets {
                     let session_id = format!("session-{}", uuid::Uuid::new_v4());
                     state.attach(&session_id, &t.target_id);
+                    backend.set_attached(&t.target_id, true);
                     out.push(
                         serde_json::to_value(CdpEvent::with_session(
                             "Target.attachedToTarget",
@@ -170,7 +185,6 @@ pub async fn handle_target_browser(
                             req.session_id.clone().unwrap_or_default(),
                         ))
                         .unwrap_or_else(|_| {
-                            // if no parent session, emit without session; use new() form
                             serde_json::to_value(CdpEvent::new(
                                 "Target.attachedToTarget",
                                 json!({

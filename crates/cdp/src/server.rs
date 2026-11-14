@@ -233,11 +233,12 @@ async fn run_ws(
     if let Some(pid) = default_page {
         let sid = format!("page-session-{pid}");
         state.attach(&sid, &pid);
+        backend.set_attached(&pid, true);
         state.default_session = Some(sid);
     }
 
     let mut backend_events = backend.events();
-    loop {
+    'conn: loop {
         if stop.load(Ordering::Relaxed) {
             break;
         }
@@ -252,7 +253,7 @@ async fn run_ws(
                         let responses = handle_request(&backend, &mut state, req).await;
                         for r in responses {
                             let s = serde_json::to_string(&r).unwrap_or_default();
-                            if write.send(Message::Text(s.into())).await.is_err() { return Ok(()); }
+                            if write.send(Message::Text(s.into())).await.is_err() { break 'conn; }
                         }
                     }
                 } else if let Message::Close(_) = msg {
@@ -263,12 +264,17 @@ async fn run_ws(
                 if let Ok(ev) = ev {
                     for out in session::events_from_backend(&mut state, ev) {
                         let s = serde_json::to_string(&out).unwrap_or_default();
-                        if write.send(Message::Text(s.into())).await.is_err() { return Ok(()); }
+                        if write.send(Message::Text(s.into())).await.is_err() { break 'conn; }
                     }
                 }
             }
             _ = tokio::time::sleep(std::time::Duration::from_millis(100)) => {}
         }
+    }
+    // The client is gone: its targets are no longer attached through it.
+    let targets: std::collections::HashSet<String> = state.sessions.values().cloned().collect();
+    for tid in targets {
+        backend.set_attached(&tid, false);
     }
     Ok(())
 }

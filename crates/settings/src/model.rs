@@ -167,6 +167,24 @@ impl Default for DevtoolsSettings {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
+pub struct CdpSettings {
+    /// Start the Chrome DevTools Protocol server at launch.
+    pub enabled: bool,
+    /// Port on 127.0.0.1.
+    pub port: u16,
+}
+
+impl Default for CdpSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            port: 9222,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
 pub struct MemorySettings {
     pub js_jit: bool,
     pub js_gc_profile: String,
@@ -195,5 +213,6 @@ pub struct Settings {
     pub downloads: DownloadsSettings,
     pub hang: HangSettings,
     pub devtools: DevtoolsSettings,
+    pub cdp: CdpSettings,
     pub memory: MemorySettings,
 }

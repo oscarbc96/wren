@@ -42,6 +42,7 @@ pub trait CdpBackend {
         params: Value,
     ) -> Result<Value, CdpFailure>;
     fn events(&self) -> broadcast::Receiver<BackendEvent>;
+    fn set_attached(&self, _target_id: &str, _attached: bool) {}
 }
 
 pub trait CdpBackendFactory: Send + Sync {

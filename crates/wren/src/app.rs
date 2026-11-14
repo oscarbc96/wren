@@ -12,6 +12,7 @@ use url::Url;
 use engine::Engine;
 
 use crate::actions;
+use crate::cdp_bridge::CdpBridge;
 use crate::cli::Args;
 use crate::screenshot;
 use crate::window::BrowserWindow;
@@ -38,6 +39,7 @@ pub fn run_with_args(args: Args) {
         Some(port) => Some(port),
         None => settings.devtools.enabled.then_some(settings.devtools.port),
     };
+    let cdp_port = crate::cdp_bridge::cdp_port(args.remote_debugging_port, &settings.cdp);
     let engine_options = engine::EngineOptions {
         devtools_port,
         js_gc_profile: settings.memory.js_gc_profile.clone(),
@@ -159,6 +161,12 @@ pub fn run_with_args(args: Args) {
                             )
                         };
                         view.set_devtools_state(devtools_port, Some(settings_file));
+                        if let Some(port) = cdp_port {
+                            match CdpBridge::start(port) {
+                                Ok(bridge) => view.set_cdp_bridge(Some(bridge)),
+                                Err(e) => eprintln!("failed to start cdp server: {e}"),
+                            }
+                        }
                         if settings_for_win.memory.pressure_response
                             && let Some(src) = crate::memory_pressure::DispatchPressureSource::new()
                         {
@@ -207,6 +215,20 @@ pub fn run_with_args(args: Args) {
                     })
                     .is_ok();
                 if !ok {
+                    break;
+                }
+                // cdp quit is detected in tick; also check via bridge state
+                let quit = handle
+                    .update(cx, |view, _window, _cx| {
+                        view.cdp_bridge
+                            .as_ref()
+                            .map(|b| b.take_quit_requested())
+                            .unwrap_or(false)
+                    })
+                    .unwrap_or(false);
+                if quit {
+                    let _ = handle.update(cx, |view, _window, _cx| view.shutdown());
+                    cx.update(|app| app.quit());
                     break;
                 }
                 if let Some(out) = memory_report_out_for_task.clone() {

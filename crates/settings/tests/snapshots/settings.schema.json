@@ -56,6 +56,13 @@
         "port": 6000
       }
     },
+    "cdp": {
+      "$ref": "#/$defs/CdpSettings",
+      "default": {
+        "enabled": false,
+        "port": 9222
+      }
+    },
     "memory": {
       "$ref": "#/$defs/MemorySettings",
       "default": {
@@ -167,6 +174,24 @@
           "minimum": 0,
           "maximum": 65535,
           "default": 6000
+        }
+      }
+    },
+    "CdpSettings": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "description": "Start the Chrome DevTools Protocol server at launch.",
+          "type": "boolean",
+          "default": false
+        },
+        "port": {
+          "description": "Port on 127.0.0.1.",
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0,
+          "maximum": 65535,
+          "default": 9222
         }
       }
     },

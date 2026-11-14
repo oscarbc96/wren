@@ -18,6 +18,7 @@ struct FakeBackend {
     calls: Arc<Mutex<Vec<(Option<String>, String, Value)>>>,
     events_tx: broadcast::Sender<BackendEvent>,
     responses: Arc<Mutex<VecDeque<Result<Value, CdpFailure>>>>,
+    attached: Arc<Mutex<Vec<(String, bool)>>>,
 }
 
 impl FakeBackend {
@@ -28,6 +29,7 @@ impl FakeBackend {
             calls: Arc::new(Mutex::new(Vec::new())),
             events_tx,
             responses: Arc::new(Mutex::new(VecDeque::new())),
+            attached: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -66,6 +68,13 @@ impl CdpBackend for FakeBackend {
 
     fn events(&self) -> broadcast::Receiver<BackendEvent> {
         self.events_tx.subscribe()
+    }
+
+    fn set_attached(&self, target_id: &str, attached: bool) {
+        self.attached
+            .lock()
+            .unwrap()
+            .push((target_id.to_string(), attached));
     }
 }
 
@@ -367,4 +376,37 @@ async fn destroyed_target_detaches_session_and_keeps_connection() {
             break;
         }
     }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn disconnect_releases_attached_targets() {
+    let backend = FakeBackend::new(two_targets());
+    let backend_clone = backend.clone();
+    let (_handle, port) = start_server(backend);
+    let mut ws = ws_connect(port, "/devtools/browser/test").await;
+    ws_send(
+        &mut ws,
+        json!({"id":1,"method":"Target.attachToTarget","params":{"targetId":"A","flatten":true}}),
+    )
+    .await;
+    loop {
+        if ws_recv_json(&mut ws).await["id"] == 1 {
+            break;
+        }
+    }
+    drop(ws);
+    for _ in 0..50 {
+        if backend_clone
+            .attached
+            .lock()
+            .unwrap()
+            .contains(&("A".to_string(), false))
+        {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    let log = backend_clone.attached.lock().unwrap().clone();
+    assert_eq!(log.first(), Some(&("A".to_string(), true)));
+    assert_eq!(log.last(), Some(&("A".to_string(), false)));
 }

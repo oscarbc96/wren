@@ -2,6 +2,8 @@ use std::sync::Arc;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
+use crate::cdp_bridge::CdpBridge;
+
 use crate::open_in_chrome::{self, Opener, SystemOpener};
 
 use engine::{Engine, EngineEvent, EngineInput, LoadState, Modifiers, MouseButton, WebViewId};
@@ -47,6 +49,9 @@ pub struct BrowserWindow<E: Engine + 'static, S: Store + 'static> {
     pub devtools_enabled: bool,
     /// Port of the DevTools server running now, if Servo started one.
     pub devtools_running: Option<u16>,
+    /// CDP server bridge, if running.
+    pub cdp_bridge: Option<CdpBridge>,
+    pub cdp_quit_pending: bool,
     /// User settings file the DevTools toggle writes to; `None` in tests.
     settings_file: Option<std::path::PathBuf>,
     content_origin: Point<Pixels>,
@@ -208,6 +213,8 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
             task_manager_open: false,
             devtools_enabled: false,
             devtools_running: None,
+            cdp_bridge: None,
+            cdp_quit_pending: false,
             settings_file: None,
             content_origin: Point {
                 x: px(0.),
@@ -338,6 +345,27 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
         self.update_devtools_indicator();
     }
 
+    pub fn set_cdp_bridge(&mut self, bridge: Option<CdpBridge>) {
+        self.cdp_bridge = bridge;
+        self.update_devtools_indicator();
+    }
+
+    pub fn cdp_port(&self) -> Option<u16> {
+        self.cdp_bridge.as_ref().map(|b| b.port())
+    }
+
+    pub fn cdp_quit_requested(&mut self) -> bool {
+        if self
+            .cdp_bridge
+            .as_ref()
+            .map(|b| b.take_quit_requested())
+            .unwrap_or(false)
+        {
+            self.cdp_quit_pending = true;
+        }
+        std::mem::take(&mut self.cdp_quit_pending)
+    }
+
     /// Flips `devtools.enabled`. Servo starts its DevTools server only at
     /// launch, so the change applies on the next start; the toolbar says so.
     pub fn toggle_devtools(&mut self) {
@@ -361,6 +389,10 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
     }
 
     fn update_devtools_indicator(&mut self) {
+        if let Some(port) = self.cdp_port() {
+            self.toolbar.devtools_indicator = Some(format!("CDP :{port}"));
+            return;
+        }
         let port = self.settings.devtools.port;
         self.toolbar.devtools_indicator = match (self.devtools_running, self.devtools_enabled) {
             (Some(p), true) => Some(format!("DevTools on :{p}")),
@@ -424,6 +456,12 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
         }
         for ev in events {
             self.handle_event(&ev);
+        }
+        if let Some(bridge) = self.cdp_bridge.as_mut() {
+            bridge.pump(&mut self.engine, &mut self.strip);
+        }
+        if self.cdp_quit_requested() {
+            self.shutdown();
         }
         self.poll_downloads();
 

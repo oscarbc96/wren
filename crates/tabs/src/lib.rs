@@ -32,6 +32,7 @@ pub struct Tab {
     pub state: TabState,
     pub pinned: bool,
     pub audible: bool,
+    pub attached: bool,
     pub last_active: Timestamp,
 }
 
@@ -104,6 +105,7 @@ impl TabStrip {
             state,
             pinned: false,
             audible: false,
+            attached: false,
             last_active: now,
         };
         self.tabs.push(tab);
@@ -255,6 +257,7 @@ impl TabStrip {
             state: TabState::Active,
             pinned: false,
             audible: false,
+            attached: false,
             last_active: now,
         };
         let mut idx = entry.index;
@@ -291,11 +294,17 @@ impl TabStrip {
         self.changed_flag = true;
     }
 
+    pub fn set_attached(&mut self, id: TabId, attached: bool) {
+        if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id) {
+            tab.attached = attached;
+        }
+    }
+
     pub fn sleep(&mut self, e: &mut dyn Engine, id: TabId) {
         let Some(idx) = self.tabs.iter().position(|t| t.id == id) else {
             return;
         };
-        if self.tabs[idx].state == TabState::Slept {
+        if self.tabs[idx].state == TabState::Slept || self.tabs[idx].attached {
             return;
         }
         e.close(self.tabs[idx].webview);
@@ -343,7 +352,7 @@ impl TabStrip {
                 if self.active == Some(i) {
                     return None;
                 }
-                if t.pinned || t.audible {
+                if t.pinned || t.audible || t.attached {
                     return None;
                 }
                 if t.state == TabState::Slept {
@@ -385,7 +394,7 @@ impl TabStrip {
                     if self.active == Some(i) {
                         return None;
                     }
-                    if t.pinned || t.audible || t.state == TabState::Slept {
+                    if t.pinned || t.audible || t.attached || t.state == TabState::Slept {
                         return None;
                     }
                     Some((t.last_active, t.id))
@@ -468,6 +477,7 @@ impl TabStrip {
                     state: TabState::Background,
                     pinned: false,
                     audible: false,
+                    attached: false,
                     last_active: now,
                 };
                 if insert_at >= self.tabs.len() {
@@ -545,6 +555,7 @@ impl TabStrip {
                 state,
                 pinned: false,
                 audible: false,
+                attached: false,
                 last_active: now,
             });
         }
