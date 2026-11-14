@@ -139,4 +139,3 @@ run = "bun run check-translations"
 [tasks.shot]
 description = "Build Wren and save a screenshot of its window to target/shots/$SHOT_NAME.png (default window); args are URLs"
 run = "scripts/shot.sh"
-
