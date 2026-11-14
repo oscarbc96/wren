@@ -116,6 +116,7 @@ pub trait Engine {
     fn show(&mut self, id: WebViewId, rect: ViewRect);
     fn hide(&mut self, id: WebViewId);
     fn input(&mut self, _id: WebViewId, _ev: EngineInput) {}
+    fn run_script(&mut self, _id: WebViewId, _js: &str) {}
     fn spin(&mut self);
     fn drain_events(&mut self) -> Vec<EngineEvent>;
     fn shutdown(&mut self) {}

@@ -15,6 +15,7 @@ pub enum FakeCall {
     Show { id: WebViewId, rect: ViewRect },
     Hide { id: WebViewId },
     Input(WebViewId, EngineInput),
+    RunScript { id: WebViewId, js: String },
     Spin,
     DrainEvents,
 }
@@ -82,6 +83,13 @@ impl Engine for FakeEngine {
 
     fn input(&mut self, id: WebViewId, ev: EngineInput) {
         self.calls.push(FakeCall::Input(id, ev));
+    }
+
+    fn run_script(&mut self, id: WebViewId, js: &str) {
+        self.calls.push(FakeCall::RunScript {
+            id,
+            js: js.to_string(),
+        });
     }
 
     fn spin(&mut self) {

@@ -1,0 +1,22 @@
+[package]
+name = "creds"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+url.workspace = true
+rusqlite.workspace = true
+csv = "1"
+security-framework = "3"
+aes = "0.8"
+cbc = "0.1"
+pbkdf2 = "0.12"
+sha1 = "0.10"
+serde_json.workspace = true
+tempfile.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+url.workspace = true
