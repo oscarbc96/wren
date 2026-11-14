@@ -95,7 +95,8 @@ impl TabStrip {
             webview,
             url: url.clone(),
             title: String::new(),
-            loading: false,
+            // Servo sends no Load Started for a web view's first load.
+            loading: true,
             can_back: false,
             can_forward: false,
             crashed: None,

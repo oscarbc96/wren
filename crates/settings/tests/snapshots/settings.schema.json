@@ -60,7 +60,7 @@
       "$ref": "#/$defs/MemorySettings",
       "default": {
         "js_jit": true,
-        "js_gc_profile": "low",
+        "js_gc_profile": "default",
         "pressure_response": true
       }
     }
@@ -179,7 +179,7 @@
         },
         "js_gc_profile": {
           "type": "string",
-          "default": "low"
+          "default": "default"
         },
         "pressure_response": {
           "type": "boolean",

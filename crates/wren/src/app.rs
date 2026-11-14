@@ -85,6 +85,7 @@ pub fn run_with_args(args: Args) {
         .ok();
 
     let screenshot_out = args.screenshot.clone().map(PathBuf::from);
+    let harness_out = args.harness.clone().map(PathBuf::from);
     let screenshot_delay_ms = args.screenshot_delay_ms;
     let memory_report_out = args.memory_report.clone().map(PathBuf::from);
     let screenshot_has_urls = !urls.is_empty();
@@ -100,6 +101,7 @@ pub fn run_with_args(args: Args) {
         let store_for_win = store.clone();
         let settings_for_win = settings.clone();
         let urls_for_win = urls.clone();
+        let harness_mode = harness_out.is_some();
         let window_options = WindowOptions {
             titlebar: Some(
                 TitlebarOptions::default()
@@ -131,7 +133,16 @@ pub fn run_with_args(args: Args) {
                     }
                     let settings_file = settings_file.clone();
                     cx.new(|cx| {
-                        let mut view = if urls_for_win.is_empty() {
+                        let mut view = if harness_mode {
+                            // Start empty; harness loop opens URLs one at a time.
+                            BrowserWindow::with_urls(
+                                engine,
+                                store_for_win.clone(),
+                                settings_for_win.clone(),
+                                Vec::new(),
+                                cx,
+                            )
+                        } else if urls_for_win.is_empty() {
                             BrowserWindow::new(
                                 engine,
                                 store_for_win.clone(),
@@ -163,9 +174,22 @@ pub fn run_with_args(args: Args) {
         });
 
         let screenshot_out_for_task = screenshot_out.clone();
+        let harness_out_for_task = harness_out.clone();
         let screenshot_view_ptr_for_task = screenshot_view_ptr.clone();
         let memory_report_out_for_task = memory_report_out.clone();
+        let harness_urls = urls.clone();
         cx.spawn(async move |cx| {
+            if let Some(out_json) = harness_out_for_task {
+                run_harness_loop(
+                    cx,
+                    handle,
+                    screenshot_view_ptr_for_task,
+                    out_json,
+                    harness_urls,
+                )
+                .await;
+                return;
+            }
             let mut seen_loading = false;
             let start = std::time::Instant::now();
             loop {
@@ -289,4 +313,146 @@ fn register_actions(cx: &mut App) {
         KeyBinding::new("cmd-shift-]", actions::Next, None),
         KeyBinding::new("cmd-q", actions::Quit, None),
     ]);
+}
+
+async fn run_harness_loop(
+    cx: &mut gpui::AsyncApp,
+    handle: gpui::WindowHandle<BrowserWindow<engine::ServoEngine, SqliteStore>>,
+    screenshot_view_ptr: Arc<std::sync::Mutex<Option<usize>>>,
+    out_json: PathBuf,
+    urls: Vec<Url>,
+) {
+    use std::time::Instant;
+    let mut entries: Vec<serde_json::Value> = Vec::new();
+    let out_dir = out_json
+        .parent()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."));
+    let _ = std::fs::create_dir_all(&out_dir);
+
+    for (i, url) in urls.into_iter().enumerate() {
+        let url_str = url.to_string();
+        let open_ok = handle
+            .update(cx, |view, _window, _cx| {
+                // close existing tabs to keep one at a time
+                let ids: Vec<_> = view.strip.tabs().iter().map(|t| t.id).collect();
+                for id in ids {
+                    view.strip.close(&mut view.engine, id);
+                }
+                view.strip.open(&mut view.engine, &url, true);
+            })
+            .is_ok();
+        if !open_ok {
+            entries.push(serde_json::json!({
+                "url": url_str.clone(),
+                "final_url": url_str,
+                "title": "",
+                "load_ms": 20000u64,
+                "console_errors": [],
+                "screenshot_png": "",
+                "crashed": true
+            }));
+            continue;
+        }
+
+        let start = Instant::now();
+        let mut saw_loading = false;
+        let mut done = false;
+        let mut crashed = false;
+        let mut final_url = url_str.clone();
+        let mut title = String::new();
+        let mut load_ms: u64 = 20_000;
+        while !done {
+            cx.background_executor()
+                .timer(Duration::from_millis(8))
+                .await;
+            let tick_ok = handle
+                .update(cx, |view, window, cx| {
+                    view.tick(window, cx);
+                })
+                .is_ok();
+            if !tick_ok {
+                crashed = true;
+                break;
+            }
+            let state = handle
+                .update(cx, |view, _window, _cx| {
+                    view.active_tab().map(|t| {
+                        (
+                            t.loading,
+                            t.url.to_string(),
+                            t.title.clone(),
+                            t.crashed.is_some(),
+                        )
+                    })
+                })
+                .ok()
+                .flatten();
+            if let Some((loading, fu, ti, cr)) = state {
+                final_url = fu;
+                title = ti;
+                if loading {
+                    saw_loading = true;
+                }
+                if cr {
+                    crashed = true;
+                    load_ms = start.elapsed().as_millis() as u64;
+                    done = true;
+                } else if saw_loading && !loading {
+                    load_ms = start.elapsed().as_millis() as u64;
+                    done = true;
+                }
+            }
+            if !done && start.elapsed() >= Duration::from_secs(20) {
+                load_ms = start.elapsed().as_millis().min(20_000_u128) as u64;
+                done = true;
+            }
+        }
+
+        let shot_name = format!("harness-{i}.png");
+        let shot_path = out_dir.join(&shot_name);
+        // give a brief moment for paint after load before capture
+        for _ in 0..30 {
+            cx.background_executor()
+                .timer(Duration::from_millis(16))
+                .await;
+            let _ = handle.update(cx, |view, window, cx| view.tick(window, cx));
+        }
+        let ptr = *screenshot_view_ptr.lock().unwrap();
+        if let Some(p) = ptr
+            && let Some(wn) = screenshot::window_number_from_view(p as *mut _)
+        {
+            let _ = screenshot::capture_window_png(wn, &shot_path);
+        }
+        let screenshot_png = if shot_path.exists() {
+            shot_path.to_string_lossy().into_owned()
+        } else {
+            String::new()
+        };
+
+        entries.push(serde_json::json!({
+            "url": url_str,
+            "final_url": final_url,
+            "title": title,
+            "load_ms": load_ms,
+            "console_errors": [],
+            "screenshot_png": screenshot_png,
+            "crashed": crashed
+        }));
+
+        let _ = handle.update(cx, |view, _window, _cx| {
+            let ids: Vec<_> = view.strip.tabs().iter().map(|t| t.id).collect();
+            for id in ids {
+                view.strip.close(&mut view.engine, id);
+            }
+        });
+    }
+
+    let report = serde_json::json!({ "entries": entries });
+    if let Ok(json) = serde_json::to_string_pretty(&report) {
+        let _ = std::fs::write(&out_json, json);
+    }
+    // Exit without Servo's graceful shutdown: it can hang after content
+    // processes were closed, and content processes exit when we do.
+    std::process::exit(0);
 }
