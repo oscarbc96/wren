@@ -247,10 +247,26 @@ fn parse_color(s: &str) -> Option<Hsla> {
     Some(gpui::rgb_to_hsla(gpui::rgba(n)))
 }
 
+fn system_is_dark() -> bool {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::NSApplication;
+    let Some(mtm) = MainThreadMarker::new() else {
+        return false;
+    };
+    let app = NSApplication::sharedApplication(mtm);
+    let appearance = app.appearance();
+    let name = appearance.map(|a| a.name().to_string()).unwrap_or_default();
+    name.contains("Dark")
+}
+
 /// Initialize themes: load builtins and set active theme global.
 pub fn init(cx: &mut App) {
     let reg = ThemeRegistry::from_builtins();
-    let active_name = DEFAULT_LIGHT;
+    let active_name = if system_is_dark() {
+        DEFAULT_DARK
+    } else {
+        DEFAULT_LIGHT
+    };
     let active = reg.get(active_name).cloned().unwrap_or_else(default_theme);
     // store registry as global? add ThemeRegistry global
     cx.set_global(reg);

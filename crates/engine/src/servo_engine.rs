@@ -199,9 +199,16 @@ struct Delegate {
     events: EventQueue,
     navigation_filter: Rc<std::cell::RefCell<Option<NavigationFilter>>>,
     filter: std::rc::Rc<std::cell::RefCell<Option<RequestFilter>>>,
+    frame_ready: Rc<std::cell::Cell<bool>>,
+    framed: Rc<std::cell::RefCell<HashSet<WebViewId>>>,
 }
 
 impl WebViewDelegate for Delegate {
+    fn notify_new_frame_ready(&self, _webview: WebView) {
+        self.frame_ready.set(true);
+        self.framed.borrow_mut().insert(self.id);
+    }
+
     fn notify_url_changed(&self, _webview: WebView, url: Url) {
         self.events
             .push(EngineEvent::UrlChanged { id: self.id, url });
@@ -360,6 +367,13 @@ pub struct ServoEngine {
     request_filter: std::rc::Rc<std::cell::RefCell<Option<RequestFilter>>>,
     hang_timeout: Duration,
     ping_state: HashMap<WebViewId, PingState>,
+    surface_size: Option<PhysicalSize<u32>>,
+    view_sizes: HashMap<WebViewId, PhysicalSize<u32>>,
+    frame_ready: Rc<std::cell::Cell<bool>>,
+    /// Web views that have produced at least one frame.
+    framed: Rc<std::cell::RefCell<HashSet<WebViewId>>>,
+    /// Web views to hide once they have produced their first frame.
+    pending_hide: std::cell::RefCell<HashSet<WebViewId>>,
 }
 
 impl ServoEngine {
@@ -392,8 +406,21 @@ impl ServoEngine {
         let raw_dh = RawDisplayHandle::AppKit(AppKitDisplayHandle::new());
         let safe_dh = unsafe { raw_window_handle::DisplayHandle::borrow_raw(raw_dh) };
         let safe_wh = unsafe { raw_window_handle::WindowHandle::borrow_raw(raw_child_wh) };
+        // Start at the parent's real pixel size: WebRender sizes some
+        // resources from the initial surface, and a 1x1 start paints blank.
+        let initial_size = {
+            let b = parent_view.bounds();
+            let scale = parent_view
+                .window()
+                .map(|w| w.backingScaleFactor())
+                .unwrap_or(2.0);
+            PhysicalSize::new(
+                ((b.size.width * scale).round() as u32).max(1),
+                ((b.size.height * scale).round() as u32).max(1),
+            )
+        };
         let rendering_context = Rc::new(
-            WindowRenderingContext::new(safe_dh, safe_wh, PhysicalSize::new(1, 1))
+            WindowRenderingContext::new(safe_dh, safe_wh, initial_size)
                 .map_err(|e| anyhow::anyhow!("failed to create rendering context: {e:?}"))?,
         );
         let _ = rendering_context.make_current();
@@ -424,6 +451,11 @@ impl ServoEngine {
             events: EventQueue::default(),
             shown: None,
             navigation_filter: Rc::new(std::cell::RefCell::new(None)),
+            surface_size: None,
+            view_sizes: HashMap::new(),
+            frame_ready: Rc::new(std::cell::Cell::new(true)),
+            framed: Rc::new(std::cell::RefCell::new(HashSet::new())),
+            pending_hide: std::cell::RefCell::new(HashSet::new()),
             request_filter: std::rc::Rc::new(std::cell::RefCell::new(None)),
             hang_timeout: Duration::from_secs(5),
             ping_state: HashMap::new(),
@@ -574,6 +606,41 @@ impl ServoEngine {
     }
 }
 
+impl ServoEngine {
+    /// Hides a web view, or defers the hide until its first frame (Servo
+    /// 0.8 never paints a view hidden before that).
+    fn hide_view(&self, id: WebViewId) {
+        if !self.framed.borrow().contains(&id) {
+            self.pending_hide.borrow_mut().insert(id);
+            return;
+        }
+        if let Some(entry) = self.views.get(&id) {
+            entry.webview.hide();
+        }
+    }
+
+    /// Applies hides deferred by `hide_view` for views that now have a frame.
+    fn apply_pending_hides(&self) {
+        let ready: Vec<WebViewId> = {
+            let framed = self.framed.borrow();
+            self.pending_hide
+                .borrow()
+                .iter()
+                .copied()
+                .filter(|id| framed.contains(id))
+                .collect()
+        };
+        for id in ready {
+            self.pending_hide.borrow_mut().remove(&id);
+            if self.shown != Some(id)
+                && let Some(entry) = self.views.get(&id)
+            {
+                entry.webview.hide();
+            }
+        }
+    }
+}
+
 impl Engine for ServoEngine {
     fn create(&mut self, url: &Url) -> WebViewId {
         let id = self.alloc_id();
@@ -582,13 +649,17 @@ impl Engine for ServoEngine {
             events: self.events.clone(),
             navigation_filter: self.navigation_filter.clone(),
             filter: self.request_filter.clone(),
+            frame_ready: self.frame_ready.clone(),
+            framed: self.framed.clone(),
         });
         let webview = WebViewBuilder::new(self.servo(), self.rendering_context.clone())
             .url(url.clone())
             .delegate(delegate)
             .build();
         // Hide unless it becomes the shown view.
-        webview.hide();
+        // Servo 0.8 never paints a web view that was hidden before its first
+        // frame, so the hide waits for that frame (see `spin`).
+        self.pending_hide.borrow_mut().insert(id);
         self.views.insert(id, WebViewEntry { webview });
         self.awaiting_pid.push_back(id);
         id
@@ -603,6 +674,9 @@ impl Engine for ServoEngine {
         self.awaiting_pid.retain(|w| *w != id);
         self.pids.retain(|_, w| *w != id);
         self.ping_state.remove(&id);
+        self.framed.borrow_mut().remove(&id);
+        self.pending_hide.borrow_mut().remove(&id);
+        self.view_sizes.remove(&id);
     }
 
     fn load(&mut self, id: WebViewId, url: &Url) {
@@ -633,9 +707,9 @@ impl Engine for ServoEngine {
         // Hide currently shown webview.
         if let Some(current) = self.shown
             && current != id
-            && let Some(entry) = self.views.get(&current)
+            && self.views.contains_key(&current)
         {
-            entry.webview.hide();
+            self.hide_view(current);
         }
 
         let parent_bounds = self.parent_view.bounds();
@@ -661,19 +735,34 @@ impl Engine for ServoEngine {
         let pw = (rect.width.max(1.0) * scale).round().max(1.0) as u32;
         let ph = (rect.height.max(1.0) * scale).round().max(1.0) as u32;
         let size = PhysicalSize::new(pw, ph);
-        self.rendering_context.resize(size);
+        // Resizing recreates the surfaces, so only do it when the size
+        // changes; doing it every tick presents blank surfaces.
+        let resized = self.surface_size != Some(size);
+        if resized {
+            self.rendering_context.resize(size);
+            self.surface_size = Some(size);
+            self.frame_ready.set(true);
+        }
 
         if let Some(entry) = self.views.get(&id) {
-            entry.webview.resize(size);
-            entry.webview.show();
+            if resized || self.shown != Some(id) || self.view_sizes.get(&id) != Some(&size) {
+                entry
+                    .webview
+                    .set_hidpi_scale_factor(euclid::Scale::new(scale));
+                entry.webview.resize(size);
+                self.view_sizes.insert(id, size);
+            }
+            self.pending_hide.borrow_mut().remove(&id);
+            if self.shown != Some(id) {
+                entry.webview.show();
+                self.frame_ready.set(true);
+            }
             self.shown = Some(id);
         }
     }
 
     fn hide(&mut self, id: WebViewId) {
-        if let Some(entry) = self.views.get(&id) {
-            entry.webview.hide();
-        }
+        self.hide_view(id);
         if self.shown == Some(id) {
             self.shown = None;
             self.child_view.setHidden(true);
@@ -710,13 +799,18 @@ impl Engine for ServoEngine {
         }
         self.servo().spin_event_loop();
         self.watch_children();
+        self.apply_pending_hides();
         self.check_hangs();
-        if let Some(id) = self.shown
+        // Paint and present only when Servo has a new frame (or after a
+        // resize or tab switch); presenting without painting swaps in a
+        // stale or blank buffer.
+        if self.frame_ready.replace(false)
+            && let Some(id) = self.shown
             && let Some(entry) = self.views.get(&id)
         {
             entry.webview.paint();
+            self.rendering_context.present();
         }
-        self.rendering_context.present();
     }
 
     fn set_request_filter(&mut self, f: RequestFilter) {
@@ -768,16 +862,28 @@ impl Engine for ServoEngine {
     fn drain_events(&mut self) -> Vec<EngineEvent> {
         let evs = self.events.drain();
         let now = Instant::now();
-        for ev in &evs {
-            if let EngineEvent::Responsive { id } = ev
-                && let Some(st) = self.ping_state.get_mut(id)
-            {
-                st.outstanding = false;
-                st.last_reply = now;
-                st.hung_emitted = false;
+        // Ping replies arrive as `Responsive`; only a reply after `Hung` is
+        // reported, the rest just reset the watchdog.
+        let mut out = Vec::with_capacity(evs.len());
+        for ev in evs {
+            if let EngineEvent::Responsive { id } = ev {
+                let was_hung = match self.ping_state.get_mut(&id) {
+                    Some(st) => {
+                        let was = st.hung_emitted;
+                        st.outstanding = false;
+                        st.last_reply = now;
+                        st.hung_emitted = false;
+                        was
+                    }
+                    None => false,
+                };
+                if !was_hung {
+                    continue;
+                }
             }
+            out.push(ev);
         }
-        evs
+        out
     }
 
     fn shutdown(&mut self) {

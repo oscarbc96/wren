@@ -20,6 +20,7 @@ Do the task you were given; do not expand scope.
   Small fixes and docs may go straight to `main`.
 - Commits are signed. If signing fails, stop and report; never commit unsigned.
 - Test first: write the failing test, see it fail, then make it pass.
+- Any change to visible UI needs a screenshot: run the screenshot skill, look at the PNG, and state in the PR test plan what it shows.
 - Everything you run is a `mise` task; do not invent ad hoc commands.
 - PRs use `.github/pull_request_template.md` and fill every section; the
   `pr-template` CI check fails otherwise. Check the body before opening
