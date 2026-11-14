@@ -37,6 +37,12 @@
         "enabled": true
       }
     },
+    "downloads": {
+      "$ref": "#/$defs/DownloadsSettings",
+      "default": {
+        "dir": "/Users/oscarblancocastan/Downloads"
+      }
+    },
     "hang": {
       "$ref": "#/$defs/HangSettings",
       "default": {
@@ -108,6 +114,15 @@
         "enabled": {
           "type": "boolean",
           "default": true
+        }
+      }
+    },
+    "DownloadsSettings": {
+      "type": "object",
+      "properties": {
+        "dir": {
+          "type": "string",
+          "default": "/Users/oscarblancocastan/Downloads"
         }
       }
     },

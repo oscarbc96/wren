@@ -16,6 +16,7 @@ adblock_rules = { path = "../adblock_rules" }
 content-security-policy = "0.9"
 sysinfo = { workspace = true }
 dpi = "0.1.2"
+reqwest = { workspace = true }
 euclid = "0.22.14"
 
 [dev-dependencies]

@@ -1,6 +1,7 @@
 pub mod actions;
 pub mod app;
 pub mod cli;
+pub mod downloads;
 pub mod layout;
 pub mod open_in_chrome;
 pub mod screenshot;

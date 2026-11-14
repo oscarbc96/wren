@@ -120,6 +120,23 @@ impl Default for AdblockSettings {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
+pub struct DownloadsSettings {
+    pub dir: String,
+}
+
+impl Default for DownloadsSettings {
+    fn default() -> Self {
+        let dir = dirs::home_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("Downloads");
+        Self {
+            dir: dir.to_string_lossy().into_owned(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
 pub struct HangSettings {
     pub timeout_seconds: u64,
 }
@@ -139,5 +156,6 @@ pub struct Settings {
     pub tabs: TabSettings,
     pub sites: SitesSettings,
     pub adblock: AdblockSettings,
+    pub downloads: DownloadsSettings,
     pub hang: HangSettings,
 }

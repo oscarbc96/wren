@@ -28,6 +28,8 @@ struct Inner {
     bookmarks: Vec<BookmarkRow>,
     session: Option<SessionSnapshot>,
     fail_next: bool,
+    downloads: Vec<crate::DownloadRow>,
+    next_download_id: i64,
 }
 
 pub struct MemoryStore {
@@ -237,5 +239,48 @@ impl Store for MemoryStore {
     fn load_session(&self) -> Result<Option<SessionSnapshot>> {
         let g = self.inner.lock().unwrap();
         Ok(g.session.clone())
+    }
+
+    fn record_download(
+        &self,
+        url: &str,
+        path: &str,
+        bytes: u64,
+        total: Option<u64>,
+        state: crate::DownloadState,
+    ) -> Result<i64> {
+        let mut g = self.inner.lock().unwrap();
+        g.next_download_id += 1;
+        let id = g.next_download_id;
+        g.downloads.push(crate::DownloadRow {
+            id,
+            url: url.to_string(),
+            path: path.to_string(),
+            bytes,
+            total,
+            state,
+        });
+        Ok(id)
+    }
+
+    fn list_downloads(&self) -> Result<Vec<crate::DownloadRow>> {
+        let g = self.inner.lock().unwrap();
+        Ok(g.downloads.clone())
+    }
+
+    fn update_download(
+        &self,
+        id: i64,
+        bytes: u64,
+        total: Option<u64>,
+        state: crate::DownloadState,
+    ) -> Result<()> {
+        let mut g = self.inner.lock().unwrap();
+        if let Some(row) = g.downloads.iter_mut().find(|d| d.id == id) {
+            row.bytes = bytes;
+            row.total = total;
+            row.state = state;
+        }
+        Ok(())
     }
 }

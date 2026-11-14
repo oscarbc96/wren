@@ -36,17 +36,24 @@ impl SqliteStore {
 }
 
 fn migrate(conn: &mut Connection) -> Result<()> {
-    let current: i64 = conn
+    let mut current: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
         .unwrap_or(0);
-    if current >= 1 {
-        return Ok(());
+    if current < 1 {
+        let sql = include_str!("../migrations/001_init.sql");
+        let tx = conn.transaction()?;
+        tx.execute_batch(sql)?;
+        tx.execute_batch("PRAGMA user_version = 1")?;
+        tx.commit()?;
+        current = 1;
     }
-    let sql = include_str!("../migrations/001_init.sql");
-    let tx = conn.transaction()?;
-    tx.execute_batch(sql)?;
-    tx.execute_batch("PRAGMA user_version = 1")?;
-    tx.commit()?;
+    if current < 2 {
+        let sql = include_str!("../migrations/002_downloads.sql");
+        let tx = conn.transaction()?;
+        tx.execute_batch(sql)?;
+        tx.execute_batch("PRAGMA user_version = 2")?;
+        tx.commit()?;
+    }
     Ok(())
 }
 
@@ -287,5 +294,74 @@ impl Store for SqliteStore {
         } else {
             Ok(None)
         }
+    }
+
+    fn record_download(
+        &self,
+        url: &str,
+        path: &str,
+        bytes: u64,
+        total: Option<u64>,
+        state: crate::DownloadState,
+    ) -> Result<i64> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO downloads (url, path, bytes, total, state) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                url,
+                path,
+                bytes as i64,
+                total.map(|t| t as i64),
+                state.as_str()
+            ],
+        )?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    fn list_downloads(&self) -> Result<Vec<crate::DownloadRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn
+            .prepare("SELECT id, url, path, bytes, total, state FROM downloads ORDER BY id ASC")?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, i64>(3)?,
+                    r.get::<_, Option<i64>>(4)?,
+                    r.get::<_, String>(5)?,
+                ))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(rows
+            .into_iter()
+            .filter_map(|(id, url, path, bytes, total, state)| {
+                let state = crate::DownloadState::parse(&state)?;
+                Some(crate::DownloadRow {
+                    id,
+                    url,
+                    path,
+                    bytes: bytes.max(0) as u64,
+                    total: total.map(|t| t.max(0) as u64),
+                    state,
+                })
+            })
+            .collect())
+    }
+
+    fn update_download(
+        &self,
+        id: i64,
+        bytes: u64,
+        total: Option<u64>,
+        state: crate::DownloadState,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE downloads SET bytes = ?2, total = ?3, state = ?4 WHERE id = ?1",
+            params![id, bytes as i64, total.map(|t| t as i64), state.as_str()],
+        )?;
+        Ok(())
     }
 }
