@@ -55,6 +55,14 @@
         "enabled": false,
         "port": 6000
       }
+    },
+    "memory": {
+      "$ref": "#/$defs/MemorySettings",
+      "default": {
+        "js_jit": true,
+        "js_gc_profile": "default",
+        "pressure_response": true
+      }
     }
   },
   "$defs": {
@@ -159,6 +167,23 @@
           "minimum": 0,
           "maximum": 65535,
           "default": 6000
+        }
+      }
+    },
+    "MemorySettings": {
+      "type": "object",
+      "properties": {
+        "js_jit": {
+          "type": "boolean",
+          "default": true
+        },
+        "js_gc_profile": {
+          "type": "string",
+          "default": "default"
+        },
+        "pressure_response": {
+          "type": "boolean",
+          "default": true
         }
       }
     }

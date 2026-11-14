@@ -1,8 +1,8 @@
 //! In-memory `Engine` implementation used by tests.
 
 use crate::api::{
-    Engine, EngineEvent, EngineInput, NavigationFilter, ProcessInfo, RequestFilter, ViewRect,
-    WebViewId,
+    Engine, EngineEvent, EngineInput, MemoryRow, NavigationFilter, ProcessInfo, RequestFilter,
+    ViewRect, WebViewId,
 };
 use url::Url;
 
@@ -24,18 +24,36 @@ pub enum FakeCall {
     SetRequestFilter,
     Kill { id: WebViewId },
     Processes,
+    MemoryReport,
     SetDevtools { port: Option<u16> },
     DrainEvents,
 }
 
 /// Fake engine recording calls and replaying pushed events.
-#[derive(Default)]
 pub struct FakeEngine {
     next_id: u64,
     pending: Vec<EngineEvent>,
     calls: Vec<FakeCall>,
     navigation_filter: Option<NavigationFilter>,
     process_info: Vec<ProcessInfo>,
+    memory_report: Vec<MemoryRow>,
+}
+
+impl Default for FakeEngine {
+    fn default() -> Self {
+        Self {
+            next_id: 0,
+            pending: Vec::new(),
+            calls: Vec::new(),
+            navigation_filter: None,
+            process_info: Vec::new(),
+            memory_report: vec![MemoryRow {
+                process: None,
+                path: "js-heap".to_string(),
+                bytes: 1024,
+            }],
+        }
+    }
 }
 
 impl FakeEngine {
@@ -53,6 +71,10 @@ impl FakeEngine {
 
     pub fn set_processes(&mut self, info: Vec<ProcessInfo>) {
         self.process_info = info;
+    }
+
+    pub fn set_memory_report(&mut self, rows: Vec<MemoryRow>) {
+        self.memory_report = rows;
     }
 }
 
@@ -126,6 +148,19 @@ impl Engine for FakeEngine {
     fn processes(&mut self) -> Vec<ProcessInfo> {
         self.calls.push(FakeCall::Processes);
         self.process_info.clone()
+    }
+
+    fn memory_report(&mut self) -> Vec<MemoryRow> {
+        self.calls.push(FakeCall::MemoryReport);
+        if self.memory_report.is_empty() {
+            vec![MemoryRow {
+                process: None,
+                path: "js-heap".to_string(),
+                bytes: 1024,
+            }]
+        } else {
+            self.memory_report.clone()
+        }
     }
 
     fn set_devtools(&mut self, port: Option<u16>) -> anyhow::Result<()> {

@@ -28,6 +28,10 @@ pub struct Args {
     /// Delay in milliseconds before capturing the screenshot.
     #[arg(long, default_value_t = 3000)]
     pub screenshot_delay_ms: u64,
+
+    /// Write a JSON memory report to this path after loading and exit.
+    #[arg(long, value_name = "PATH")]
+    pub memory_report: Option<String>,
 }
 
 pub fn parse() -> Args {

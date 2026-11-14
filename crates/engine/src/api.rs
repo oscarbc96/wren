@@ -8,7 +8,9 @@ pub use adblock_rules::RequestKind;
 pub type RequestFilter = Box<dyn Fn(&Url, &Url, RequestKind) -> bool>;
 
 /// Unique id for a web view managed by an `Engine`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, serde::Serialize, serde::Deserialize,
+)]
 pub struct WebViewId(pub u64);
 
 /// State of a page load.
@@ -75,6 +77,32 @@ pub struct ProcessInfo {
     pub pid: u32,
     pub rss_bytes: u64,
     pub cpu_percent: f32,
+}
+
+/// One row of a Servo memory report.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct MemoryRow {
+    pub process: Option<WebViewId>,
+    pub path: String,
+    pub bytes: u64,
+}
+
+/// Options passed to [`ServoEngine::with_options`](crate::servo_engine::ServoEngine::with_options).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EngineOptions {
+    pub devtools_port: Option<u16>,
+    pub js_gc_profile: String,
+    pub js_jit: bool,
+}
+
+impl Default for EngineOptions {
+    fn default() -> Self {
+        Self {
+            devtools_port: None,
+            js_gc_profile: "low".to_string(),
+            js_jit: true,
+        }
+    }
 }
 
 /// Filter for navigations: return `false` to deny.
@@ -159,6 +187,9 @@ pub trait Engine {
     fn set_request_filter(&mut self, _f: RequestFilter) {}
     fn kill(&mut self, _id: WebViewId) {}
     fn processes(&mut self) -> Vec<ProcessInfo> {
+        Vec::new()
+    }
+    fn memory_report(&mut self) -> Vec<MemoryRow> {
         Vec::new()
     }
     fn set_devtools(&mut self, _port: Option<u16>) -> anyhow::Result<()> {
