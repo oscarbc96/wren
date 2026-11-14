@@ -1,5 +1,48 @@
 # Changelog
 
+## [0.2.0](https://github.com/oscarbc96/wren/compare/wren-v0.1.0...wren-v0.2.0) (2026-11-14)
+
+
+### Features
+
+* **adblock_rules:** block ads and trackers ([#30](https://github.com/oscarbc96/wren/issues/30)) ([b22a10f](https://github.com/oscarbc96/wren/commit/b22a10fbfec0bc973eec2845eabc1e6c93243419))
+* cdp server behind --remote-debugging-port ([#44](https://github.com/oscarbc96/wren/issues/44)) ([491e650](https://github.com/oscarbc96/wren/commit/491e650e7535da153de9572049886e283512cfc2))
+* **cdp:** dom, network and stub domains ([#46](https://github.com/oscarbc96/wren/issues/46)) ([8cea37d](https://github.com/oscarbc96/wren/commit/8cea37df276e33553399f9d09e2c02de253a255d))
+* **cdp:** page, runtime, input and console domains ([#45](https://github.com/oscarbc96/wren/issues/45)) ([3578c84](https://github.com/oscarbc96/wren/commit/3578c84dd59d26f03eb3f507a93fce18e3b641a4))
+* **cdp:** protocol server, discovery and target sessions ([#41](https://github.com/oscarbc96/wren/issues/41)) ([1a2164e](https://github.com/oscarbc96/wren/commit/1a2164e03ead8657da48660f264404a693793be9))
+* **engine:** evaluate with result, screenshots, console and request events ([#42](https://github.com/oscarbc96/wren/issues/42)) ([08dffd8](https://github.com/oscarbc96/wren/commit/08dffd8671dfb831bc7fd90dbc2e4836cd737f11))
+* **extensions:** manifest, crx3 verification and registry ([#47](https://github.com/oscarbc96/wren/issues/47)) ([ffe1f19](https://github.com/oscarbc96/wren/commit/ffe1f19427c4c74b60bbdd3089cc895848799add))
+* fetch script for the chrome devtools frontend ([#43](https://github.com/oscarbc96/wren/issues/43)) ([205c848](https://github.com/oscarbc96/wren/commit/205c848247ee24b0cc03f5c57b5377ca8516e43d))
+* **parity:** top-sites harness and must-work smoke tests ([#37](https://github.com/oscarbc96/wren/issues/37)) ([a836f5d](https://github.com/oscarbc96/wren/commit/a836f5d1ec959c828224538e8f2a6f302f7394e9))
+* **tabs:** sleep idle tabs and keep a memory budget ([#29](https://github.com/oscarbc96/wren/issues/29)) ([1ec25da](https://github.com/oscarbc96/wren/commit/1ec25da92d11445a4de2d9b8fdfb19f9709ec744))
+* **wren:** devtools via servo remote debugging ([#36](https://github.com/oscarbc96/wren/issues/36)) ([d9df6c4](https://github.com/oscarbc96/wren/commit/d9df6c49f2f1b8e529595a6c01664f8f2b5b84c5))
+* **wren:** downloads ([#35](https://github.com/oscarbc96/wren/issues/35)) ([eccc4a5](https://github.com/oscarbc96/wren/commit/eccc4a51294174050efc3bcbb94d4306e9a16bbf))
+* **wren:** open in chrome with per-site rules ([#32](https://github.com/oscarbc96/wren/issues/32)) ([626cba5](https://github.com/oscarbc96/wren/commit/626cba5073dfe85d4bdafd7881a8b8b528fb6171))
+* **wren:** task manager, end process and hang watchdog ([#33](https://github.com/oscarbc96/wren/issues/33)) ([914d403](https://github.com/oscarbc96/wren/commit/914d403ed3e22a54ef70f0913cb615883e0c8d3c))
+
+
+### Fixes
+
+* **wren:** pages render, browser chrome polish and a window screenshot tool ([#34](https://github.com/oscarbc96/wren/issues/34)) ([4e15b2e](https://github.com/oscarbc96/wren/commit/4e15b2e5c2fa777f9e2b8a2ab93a58d2f821b536))
+
+
+### Performance
+
+* memory pressure response and allocator relief ([#39](https://github.com/oscarbc96/wren/issues/39)) ([f4498c5](https://github.com/oscarbc96/wren/commit/f4498c5cb21f7eb50c5dcbdf6001bf52a6eb9189))
+* memory report, profile footprint and the js gc profile ([#38](https://github.com/oscarbc96/wren/issues/38)) ([028a85a](https://github.com/oscarbc96/wren/commit/028a85aab16570530dcb5ff4d68afe972f33ae37))
+
+
+### Docs
+
+* bun spike (mimalloc and bun for extension workers) ([1d38692](https://github.com/oscarbc96/wren/commit/1d3869279e8f4fdd3a5e37744cbe8b673947d40e))
+* generative UI is the moat (spec, roadmap, m5 logged-in tools and re-check) ([eb2246c](https://github.com/oscarbc96/wren/commit/eb2246c5366361c6a41b64ec317778249c218140))
+* m2 chrome devtools plan ([67ece48](https://github.com/oscarbc96/wren/commit/67ece48894ab031834842d388605527e1dee6947))
+* m3 extensions plan ([4062d61](https://github.com/oscarbc96/wren/commit/4062d6132f032cd58a4b8ab6fb58aa6aadae028f))
+* m4 ai core plan ([5a8966e](https://github.com/oscarbc96/wren/commit/5a8966e556ee33fc70e44e5c3575ad9b769c8816))
+* m5 generated pages plan ([457f90e](https://github.com/oscarbc96/wren/commit/457f90ebb72e2f2431109d274c282ad57fb71018))
+* m6, m7 and alpha plans ([ec18631](https://github.com/oscarbc96/wren/commit/ec18631137e41b636fd6a9e1ee3ffb1fd03191de))
+* **spec:** servo patch series on the fork, no upstream prs, fork policy ([fecef84](https://github.com/oscarbc96/wren/commit/fecef842b317bc0e41333e84d8cec13b369e31f6))
+
 ## 0.1.0 (2026-11-14)
 
 
