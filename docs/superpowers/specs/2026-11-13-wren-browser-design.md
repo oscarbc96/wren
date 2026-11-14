@@ -90,10 +90,17 @@ Who it is for, in order:
   does not expose (script injection and isolated worlds, network
   interception, accessibility tree, CDP data, form state), Wren carries a
   small patch series on its pinned Servo instead of waiting. Rules: each
-  patch is minimal, lives in a `wren-servo` branch as a separate commit,
-  has an upstream PR opened at the same time, and is dropped when upstream
-  lands it. The series is rebased on every Servo bump. Features do not
-  wait for upstream.
+  patch is minimal and lives as a separate commit on the `wren-servo`
+  branch of the fork `oscarbc96/servo`, based on the pinned Servo
+  release and consumed through `[patch.crates-io]` git pins. No pull
+  requests to upstream Servo (its project does not accept AI-written
+  contributions); a patch is dropped when upstream ships an equivalent
+  change on its own. The series is rebased on every Servo release.
+  Features do not wait for upstream.
+- **Fork policy (owner decision, 2026-11-14)**: Wren stays on released
+  Servo plus the patch series. It becomes a hard fork, maintained by
+  Wren, only if Servo stops publishing releases for 6 months or blocks
+  something essential that the patch series cannot carry.
 - Platform v1: macOS 14+ on Apple Silicon.
 - Keys and secrets live in the macOS Keychain, never in plain files.
 - Public-repo hygiene: commits and releases under a project/bot identity.
