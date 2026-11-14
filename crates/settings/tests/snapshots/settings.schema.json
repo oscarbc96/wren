@@ -42,6 +42,12 @@
       "default": {
         "timeout_seconds": 5
       }
+    },
+    "devtools": {
+      "$ref": "#/$defs/DevtoolsSettings",
+      "default": {
+        "port": 7000
+      }
     }
   },
   "$defs": {
@@ -119,6 +125,18 @@
           "format": "uint64",
           "minimum": 0,
           "default": 5
+        }
+      }
+    },
+    "DevtoolsSettings": {
+      "type": "object",
+      "properties": {
+        "port": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0,
+          "maximum": 65535,
+          "default": 7000
         }
       }
     }

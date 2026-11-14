@@ -12,6 +12,7 @@ actions!(nav, [Back, Forward, Reload]);
 actions!(bookmark, [Toggle]);
 actions!(passwords, [Fill, ImportChrome, ImportCsv]);
 actions!(site, [OpenInChrome, AlwaysOpenInChrome]);
+actions!(devtools, [Toggle]);
 actions!(app, [Quit]);
 
 /// Maps a `tab::SelectN` action to its 0-based tab index. `tab::Select9` means

@@ -765,6 +765,20 @@ impl Engine for ServoEngine {
         out
     }
 
+    fn set_devtools(&mut self, port: Option<u16>) -> anyhow::Result<()> {
+        let (enabled, addr) = match port {
+            Some(port) => (true, format!("127.0.0.1:{port}")),
+            None => (false, String::new()),
+        };
+        self.servo()
+            .set_preference("devtools_server_enabled", servo::PrefValue::Bool(enabled));
+        self.servo().set_preference(
+            "devtools_server_listen_address",
+            servo::PrefValue::Str(addr),
+        );
+        Ok(())
+    }
+
     fn drain_events(&mut self) -> Vec<EngineEvent> {
         let evs = self.events.drain();
         let now = Instant::now();

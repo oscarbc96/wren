@@ -11,6 +11,7 @@ pub struct ToolbarState {
     pub focus_omnibox: bool,
     pub crashed: Option<String>,
     pub title: String,
+    pub devtools_indicator: Option<String>,
 }
 
 impl ToolbarState {
@@ -36,7 +37,7 @@ impl ToolbarState {
             .child(format!("{} tabs", strip.tabs().len()));
         let back = if self.can_back { "<" } else { "-" };
         let fwd = if self.can_forward { ">" } else { "-" };
-        let toolbar = div()
+        let mut toolbar = div()
             .h(px(40.))
             .w_full()
             .flex()
@@ -50,8 +51,11 @@ impl ToolbarState {
                 "about:blank".to_string()
             } else {
                 self.url_text.clone()
-            }))
-            .child(if self.is_bookmarked { "*" } else { "☆" });
+            }));
+        if let Some(indicator) = &self.devtools_indicator {
+            toolbar = toolbar.child(indicator.clone());
+        }
+        let toolbar = toolbar.child(if self.is_bookmarked { "*" } else { "☆" });
         div().flex().flex_col().child(tabs_bar).child(toolbar)
     }
 }

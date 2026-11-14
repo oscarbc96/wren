@@ -176,6 +176,7 @@ fn register_actions(cx: &mut App) {
         KeyBinding::new("cmd-d", actions::Toggle, None),
         KeyBinding::new("cmd-shift-o", actions::OpenInChrome, None),
         KeyBinding::new("cmd-\\", actions::Fill, None),
+        KeyBinding::new("cmd-alt-i", actions::devtools::Toggle, None),
         KeyBinding::new("cmd-alt-escape", crate::task_manager::Toggle, None),
         KeyBinding::new("cmd-1", actions::Select1, None),
         KeyBinding::new("cmd-2", actions::Select2, None),

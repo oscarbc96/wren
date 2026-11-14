@@ -130,6 +130,18 @@ impl Default for HangSettings {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct DevtoolsSettings {
+    pub port: u16,
+}
+
+impl Default for DevtoolsSettings {
+    fn default() -> Self {
+        Self { port: 7000 }
+    }
+}
+
 /// All user-visible settings.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
@@ -140,4 +152,5 @@ pub struct Settings {
     pub sites: SitesSettings,
     pub adblock: AdblockSettings,
     pub hang: HangSettings,
+    pub devtools: DevtoolsSettings,
 }

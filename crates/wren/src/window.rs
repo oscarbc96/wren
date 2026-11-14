@@ -38,6 +38,7 @@ pub struct BrowserWindow<E: Engine + 'static, S: Store + 'static> {
     pub site_notice: Option<String>,
     pub tab_menu: Option<TabId>,
     pub task_manager_open: bool,
+    pub devtools_enabled: bool,
     content_origin: Point<Pixels>,
     last_save: Option<Instant>,
     dirty_since: Option<Instant>,
@@ -187,6 +188,7 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
             site_notice: None,
             tab_menu: None,
             task_manager_open: false,
+            devtools_enabled: false,
             content_origin: Point {
                 x: px(0.),
                 y: px(0.),
@@ -297,6 +299,22 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
 
     pub fn toggle_task_manager(&mut self) {
         self.task_manager_open = !self.task_manager_open;
+    }
+
+    pub fn toggle_devtools(&mut self) {
+        self.devtools_enabled = !self.devtools_enabled;
+        let port = self.settings.devtools.port;
+        let requested = if self.devtools_enabled {
+            Some(port)
+        } else {
+            None
+        };
+        let _ = self.engine.set_devtools(requested);
+        self.toolbar.devtools_indicator = if self.devtools_enabled {
+            Some(format!("DevTools on :{port} (applies on next launch)"))
+        } else {
+            None
+        };
     }
 
     pub fn end_process_for_tab(&mut self, webview: WebViewId) {
@@ -922,6 +940,15 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
                             }))
                             .child(url_display),
                     )
+                    .when_some(self.toolbar.devtools_indicator.clone(), |d, indicator| {
+                        d.child(
+                            div()
+                                .id("devtools-indicator")
+                                .text_sm()
+                                .text_color(theme.text)
+                                .child(indicator),
+                        )
+                    })
                     .child(
                         div()
                             .w(px(140.))
@@ -1520,6 +1547,11 @@ impl<E: Engine + 'static, S: Store + 'static> Render for BrowserWindow<E, S> {
             .on_action(cx.listener(
                 |this: &mut Self, _: &crate::task_manager::Toggle, _window, _cx| {
                     this.toggle_task_manager();
+                },
+            ))
+            .on_action(cx.listener(
+                |this: &mut Self, _: &crate::actions::devtools::Toggle, _window, _cx| {
+                    this.toggle_devtools();
                 },
             ))
     }

@@ -1,0 +1,27 @@
+---
+title: DevTools
+description: Inspect pages with Servo's remote debugging server and Firefox DevTools.
+---
+
+Wren can expose Servo's remote debugging server so you can inspect pages with
+Firefox DevTools.
+
+## Enable DevTools
+
+- Toggle: `Cmd+Alt+I`
+- Setting: `devtools.port` (default: `7000`)
+- Listen address: always `127.0.0.1:<port>` (loopback only)
+
+In Servo 0.8, the devtools server is started only when the engine initializes.
+Changing the DevTools preference at runtime does not start or stop the server
+for the current session, so Wren applies the setting on the next launch. The
+toolbar indicator tells you when DevTools will apply on next launch.
+
+## Connect from Firefox
+
+1. Enable DevTools in Wren (`Cmd+Alt+I`).
+2. Restart Wren if the toolbar indicates that the setting applies on next
+   launch.
+3. Open `about:debugging` in Firefox.
+4. Add a network location for `localhost:7000` (or your configured port).
+5. Connect and inspect the page.

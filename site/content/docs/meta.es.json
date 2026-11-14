@@ -1,4 +1,10 @@
 {
-  "title": "Documentación",
-  "pages": ["index", "roadmap", "build", "contributing"]
+  "title": "Documentaci\u00f3n",
+  "pages": [
+    "index",
+    "roadmap",
+    "build",
+    "contributing",
+    "devtools"
+  ]
 }
