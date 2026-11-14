@@ -82,7 +82,7 @@ fn pump_until<F: FnMut(&TabStrip) -> bool>(
     mut pred: F,
 ) {
     for _ in 0..300 {
-        bridge.pump(engine, tabs);
+        bridge.pump(engine, tabs, &[]);
         if pred(tabs) {
             return;
         }
@@ -99,7 +99,7 @@ fn targets_mirror_tabs() {
 
     let mut bridge = CdpBridge::start(0).expect("start bridge");
     let port = bridge.port();
-    bridge.pump(&mut engine, &mut tabs);
+    bridge.pump(&mut engine, &mut tabs, &[]);
 
     let (status, body) = http_get(port, "/json/list");
     assert_eq!(status, 200);
@@ -117,7 +117,7 @@ async fn create_target_opens_tab() {
     let mut tabs = TabStrip::new(25);
     let mut bridge = CdpBridge::start(0).expect("start bridge");
     let port = bridge.port();
-    bridge.pump(&mut engine, &mut tabs);
+    bridge.pump(&mut engine, &mut tabs, &[]);
 
     let mut ws = ws_connect(port, "/devtools/browser/test").await;
     ws_send(
@@ -146,7 +146,7 @@ async fn close_target_closes_tab() {
     let id = tabs.open(&mut engine, &url("https://close.test/"), true);
     let mut bridge = CdpBridge::start(0).expect("start bridge");
     let port = bridge.port();
-    bridge.pump(&mut engine, &mut tabs);
+    bridge.pump(&mut engine, &mut tabs, &[]);
     let target_id = wren::cdp_bridge::tab_to_target(id);
 
     let mut ws = ws_connect(port, "/devtools/browser/test").await;
@@ -170,7 +170,7 @@ async fn ui_close_detaches_session() {
     let id = tabs.open(&mut engine, &url("https://ui.test/"), true);
     let mut bridge = CdpBridge::start(0).expect("start bridge");
     let port = bridge.port();
-    bridge.pump(&mut engine, &mut tabs);
+    bridge.pump(&mut engine, &mut tabs, &[]);
     let target_id = wren::cdp_bridge::tab_to_target(id);
 
     let mut ws = ws_connect(port, "/devtools/browser/test").await;
@@ -182,7 +182,7 @@ async fn ui_close_detaches_session() {
     // drain reply + targetCreated
     let mut got_reply = false;
     for _ in 0..5 {
-        bridge.pump(&mut engine, &mut tabs);
+        bridge.pump(&mut engine, &mut tabs, &[]);
         if let Ok(msg) =
             tokio::time::timeout(Duration::from_millis(50), ws_recv_json(&mut ws)).await
         {
@@ -197,7 +197,7 @@ async fn ui_close_detaches_session() {
     }
     // ensure we consumed any created events
     for _ in 0..3 {
-        bridge.pump(&mut engine, &mut tabs);
+        bridge.pump(&mut engine, &mut tabs, &[]);
         let _ = tokio::time::timeout(Duration::from_millis(30), ws_recv_json(&mut ws)).await;
     }
 
@@ -212,7 +212,7 @@ async fn ui_close_detaches_session() {
     // read attach reply
     let mut session_id = Value::Null;
     for _ in 0..20 {
-        bridge.pump(&mut engine, &mut tabs);
+        bridge.pump(&mut engine, &mut tabs, &[]);
         if let Ok(msg) =
             tokio::time::timeout(Duration::from_millis(50), ws_recv_json(&mut ws)).await
             && msg["id"] == 2
@@ -229,7 +229,7 @@ async fn ui_close_detaches_session() {
     // pump to emit destroyed/detached events
     let mut methods = Vec::new();
     for _ in 0..50 {
-        bridge.pump(&mut engine, &mut tabs);
+        bridge.pump(&mut engine, &mut tabs, &[]);
         if let Ok(msg) =
             tokio::time::timeout(Duration::from_millis(50), ws_recv_json(&mut ws)).await
             && let Some(m) = msg["method"].as_str()
@@ -261,7 +261,7 @@ async fn ui_close_detaches_session() {
     )
     .await;
     for _ in 0..50 {
-        bridge.pump(&mut engine, &mut tabs);
+        bridge.pump(&mut engine, &mut tabs, &[]);
         if let Ok(msg) =
             tokio::time::timeout(Duration::from_millis(50), ws_recv_json(&mut ws)).await
             && msg["id"] == 3

@@ -13155,6 +13155,7 @@ dependencies = [
  "adblock_rules",
  "anyhow",
  "async-trait",
+ "base64 0.22.1",
  "cdp",
  "clap",
  "core-graphics 0.24.0",

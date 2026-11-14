@@ -454,11 +454,11 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
         if !events.is_empty() {
             cx.notify();
         }
-        for ev in events {
-            self.handle_event(&ev);
+        for ev in &events {
+            self.handle_event(ev);
         }
         if let Some(bridge) = self.cdp_bridge.as_mut() {
-            bridge.pump(&mut self.engine, &mut self.strip);
+            bridge.pump(&mut self.engine, &mut self.strip, &events);
         }
         if self.cdp_quit_requested() {
             self.shutdown();
