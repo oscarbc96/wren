@@ -1,12 +1,21 @@
 //! Tab strip model for Wren.
 
 use engine::{Engine, EngineEvent, WebViewId};
+use jiff::{SignedDuration, Timestamp};
 use store::{SessionSnapshot, SessionTab};
 use url::Url;
 
 /// Unique id for a tab. Never reused.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub struct TabId(pub u64);
+
+/// Tab lifecycle state.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TabState {
+    Active,
+    Background,
+    Slept,
+}
 
 /// One tab in the strip.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -19,6 +28,10 @@ pub struct Tab {
     pub can_back: bool,
     pub can_forward: bool,
     pub crashed: Option<String>,
+    pub state: TabState,
+    pub pinned: bool,
+    pub audible: bool,
+    pub last_active: Timestamp,
 }
 
 #[derive(Debug, Clone)]
@@ -59,6 +72,10 @@ impl TabStrip {
         &self.tabs
     }
 
+    pub fn tabs_mut(&mut self) -> &mut [Tab] {
+        &mut self.tabs
+    }
+
     pub fn active(&self) -> Option<TabId> {
         self.active.and_then(|i| self.tabs.get(i).map(|t| t.id))
     }
@@ -66,6 +83,12 @@ impl TabStrip {
     pub fn open(&mut self, e: &mut dyn Engine, url: &Url, activate: bool) -> TabId {
         let webview = e.create(url);
         let id = self.next_tab_id();
+        let now = Timestamp::now();
+        let state = if activate {
+            TabState::Active
+        } else {
+            TabState::Background
+        };
         let tab = Tab {
             id,
             webview,
@@ -75,10 +98,21 @@ impl TabStrip {
             can_back: false,
             can_forward: false,
             crashed: None,
+            state,
+            pinned: false,
+            audible: false,
+            last_active: now,
         };
         self.tabs.push(tab);
         let idx = self.tabs.len() - 1;
         if activate {
+            if let Some(old) = self.active
+                && let Some(t) = self.tabs.get_mut(old)
+                && t.state == TabState::Active
+            {
+                t.state = TabState::Background;
+                t.last_active = now;
+            }
             self.active = Some(idx);
         }
         self.changed_flag = true;
@@ -91,26 +125,38 @@ impl TabStrip {
             None => return,
         };
         let tab = self.tabs.remove(idx);
-        e.close(tab.webview);
-        // record closed
+        if tab.state != TabState::Slept {
+            e.close(tab.webview);
+        }
         if self.closed_stack > 0 {
             self.closed.push(ClosedTab {
                 url: tab.url.clone(),
                 index: idx,
             });
             if self.closed.len() > self.closed_stack {
-                // keep most recent N
                 let drop = self.closed.len() - self.closed_stack;
                 self.closed.drain(0..drop);
             }
         }
-        // adjust active
         match self.active {
             Some(a) if a == idx => {
                 if idx < self.tabs.len() {
                     self.active = Some(idx);
+                    if let Some(t) = self.tabs.get_mut(idx)
+                        && t.state == TabState::Background
+                    {
+                        t.state = TabState::Active;
+                        t.last_active = Timestamp::now();
+                    }
                 } else if !self.tabs.is_empty() {
-                    self.active = Some(self.tabs.len() - 1);
+                    let i = self.tabs.len() - 1;
+                    self.active = Some(i);
+                    if let Some(t) = self.tabs.get_mut(i)
+                        && t.state == TabState::Background
+                    {
+                        t.state = TabState::Active;
+                        t.last_active = Timestamp::now();
+                    }
                 } else {
                     self.active = None;
                 }
@@ -126,10 +172,25 @@ impl TabStrip {
     }
 
     pub fn activate(&mut self, id: TabId) {
-        if let Some(idx) = self.tabs.iter().position(|t| t.id == id)
-            && self.active != Some(idx)
-        {
+        if let Some(idx) = self.tabs.iter().position(|t| t.id == id) {
+            if self.active == Some(idx) {
+                return;
+            }
+            let now = Timestamp::now();
+            if let Some(old) = self.active
+                && let Some(t) = self.tabs.get_mut(old)
+                && t.state == TabState::Active
+            {
+                t.state = TabState::Background;
+                t.last_active = now;
+            }
             self.active = Some(idx);
+            if let Some(t) = self.tabs.get_mut(idx)
+                && t.state == TabState::Background
+            {
+                t.state = TabState::Active;
+                t.last_active = now;
+            }
             self.changed_flag = true;
         }
     }
@@ -151,7 +212,6 @@ impl TabStrip {
         }
         let tab = self.tabs.remove(from);
         self.tabs.insert(to, tab);
-        // update active
         if let Some(a) = self.active {
             let new_active = if a == from {
                 to
@@ -171,6 +231,14 @@ impl TabStrip {
         let entry = self.closed.pop()?;
         let webview = e.create(&entry.url);
         let id = self.next_tab_id();
+        let now = Timestamp::now();
+        if let Some(old) = self.active
+            && let Some(t) = self.tabs.get_mut(old)
+            && t.state == TabState::Active
+        {
+            t.state = TabState::Background;
+            t.last_active = now;
+        }
         let tab = Tab {
             id,
             webview,
@@ -180,6 +248,10 @@ impl TabStrip {
             can_back: false,
             can_forward: false,
             crashed: None,
+            state: TabState::Active,
+            pinned: false,
+            audible: false,
+            last_active: now,
         };
         let mut idx = entry.index;
         if idx > self.tabs.len() {
@@ -200,12 +272,127 @@ impl TabStrip {
             return;
         }
         self.tabs[idx].crashed = None;
-        let old = self.tabs[idx].webview;
-        e.close(old);
-        let new_wv = e.create(&self.tabs[idx].url);
-        self.tabs[idx].webview = new_wv;
+        if self.tabs[idx].state == TabState::Slept {
+            // waking via reload is fine
+            let new_wv = e.create(&self.tabs[idx].url);
+            self.tabs[idx].webview = new_wv;
+            self.tabs[idx].state = TabState::Background;
+        } else {
+            let old = self.tabs[idx].webview;
+            e.close(old);
+            let new_wv = e.create(&self.tabs[idx].url);
+            self.tabs[idx].webview = new_wv;
+        }
         self.tabs[idx].loading = true;
         self.changed_flag = true;
+    }
+
+    pub fn sleep(&mut self, e: &mut dyn Engine, id: TabId) {
+        let Some(idx) = self.tabs.iter().position(|t| t.id == id) else {
+            return;
+        };
+        if self.tabs[idx].state == TabState::Slept {
+            return;
+        }
+        e.close(self.tabs[idx].webview);
+        self.tabs[idx].state = TabState::Slept;
+        self.tabs[idx].loading = false;
+        self.tabs[idx].audible = false;
+        if self.active == Some(idx) {
+            // sleeping active is unusual, but keep active index; state becomes slept
+        }
+        self.changed_flag = true;
+    }
+
+    pub fn wake(&mut self, e: &mut dyn Engine, id: TabId) {
+        let Some(idx) = self.tabs.iter().position(|t| t.id == id) else {
+            return;
+        };
+        if self.tabs[idx].state != TabState::Slept {
+            self.activate(id);
+            return;
+        }
+        let webview = e.create(&self.tabs[idx].url);
+        self.tabs[idx].webview = webview;
+        self.tabs[idx].loading = true;
+        let now = Timestamp::now();
+        if let Some(old) = self.active
+            && old != idx
+            && let Some(t) = self.tabs.get_mut(old)
+            && t.state == TabState::Active
+        {
+            t.state = TabState::Background;
+            t.last_active = now;
+        }
+        self.active = Some(idx);
+        self.tabs[idx].state = TabState::Active;
+        self.tabs[idx].last_active = now;
+        self.changed_flag = true;
+    }
+
+    pub fn sleep_candidates(&self, now: Timestamp, after: SignedDuration) -> Vec<TabId> {
+        let mut candidates: Vec<(Timestamp, TabId)> = self
+            .tabs
+            .iter()
+            .enumerate()
+            .filter_map(|(i, t)| {
+                if self.active == Some(i) {
+                    return None;
+                }
+                if t.pinned || t.audible {
+                    return None;
+                }
+                if t.state == TabState::Slept {
+                    return None;
+                }
+                if now.duration_since(t.last_active) >= after {
+                    Some((t.last_active, t.id))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        candidates.sort_by_key(|(ts, _)| *ts);
+        candidates.into_iter().map(|(_, id)| id).collect()
+    }
+
+    pub fn sleep_until_under_budget(
+        &mut self,
+        e: &mut dyn Engine,
+        budget_bytes: u64,
+        rss: &impl Fn(TabId) -> u64,
+    ) {
+        loop {
+            let total: u64 = self
+                .tabs
+                .iter()
+                .filter(|t| t.state != TabState::Slept)
+                .map(|t| rss(t.id))
+                .sum();
+            if total <= budget_bytes {
+                break;
+            }
+            // sleep candidates in order (oldest first). include all background non-pinned non-audible.
+            let mut candidates: Vec<(Timestamp, TabId)> = self
+                .tabs
+                .iter()
+                .enumerate()
+                .filter_map(|(i, t)| {
+                    if self.active == Some(i) {
+                        return None;
+                    }
+                    if t.pinned || t.audible || t.state == TabState::Slept {
+                        return None;
+                    }
+                    Some((t.last_active, t.id))
+                })
+                .collect();
+            candidates.sort_by_key(|(ts, _)| *ts);
+            let Some((_, id)) = candidates.first().copied() else {
+                break;
+            };
+            self.sleep(e, id);
+        }
     }
 
     /// Applies an engine event. `OpenTab` creates a real webview through `e`.
@@ -253,7 +440,6 @@ impl TabStrip {
                 }
             }
             EngineEvent::OpenTab { opener, url } => {
-                // find opener tab
                 let pos = self
                     .tabs
                     .iter()
@@ -262,6 +448,7 @@ impl TabStrip {
                 let insert_at = pos.unwrap_or(self.tabs.len());
                 let webview = e.create(url);
                 let id = self.next_tab_id();
+                let now = Timestamp::now();
                 let tab = Tab {
                     id,
                     webview,
@@ -271,13 +458,28 @@ impl TabStrip {
                     can_back: false,
                     can_forward: false,
                     crashed: None,
+                    state: TabState::Background,
+                    pinned: false,
+                    audible: false,
+                    last_active: now,
                 };
                 if insert_at >= self.tabs.len() {
                     self.tabs.push(tab);
                 } else {
                     self.tabs.insert(insert_at, tab);
+                    if let Some(a) = self.active
+                        && insert_at <= a
+                    {
+                        self.active = Some(a + 1);
+                    }
                 }
                 self.changed_flag = true;
+            }
+            EngineEvent::Audible { id, playing } => {
+                if let Some(tab) = self.tabs.iter_mut().find(|t| t.webview == *id) {
+                    tab.audible = *playing;
+                    self.changed_flag = true;
+                }
             }
         }
     }
@@ -298,9 +500,15 @@ impl TabStrip {
 
     pub fn restore(e: &mut dyn Engine, s: &SessionSnapshot, closed_stack: usize) -> TabStrip {
         let mut strip = TabStrip::new(closed_stack);
-        for t in &s.tabs {
+        let now = Timestamp::now();
+        for (i, t) in s.tabs.iter().enumerate() {
             let webview = e.create(&t.url);
             let id = strip.next_tab_id();
+            let state = if s.active == Some(i) {
+                TabState::Active
+            } else {
+                TabState::Background
+            };
             strip.tabs.push(Tab {
                 id,
                 webview,
@@ -310,6 +518,10 @@ impl TabStrip {
                 can_back: false,
                 can_forward: false,
                 crashed: None,
+                state,
+                pinned: false,
+                audible: false,
+                last_active: now,
             });
         }
         if let Some(i) = s.active

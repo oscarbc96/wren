@@ -85,6 +85,8 @@ impl Default for StartupSettings {
 pub struct TabSettings {
     pub new_tab_url: String,
     pub closed_stack: usize,
+    pub sleep_after_minutes: u64,
+    pub memory_budget_mb: u64,
 }
 
 impl Default for TabSettings {
@@ -92,6 +94,8 @@ impl Default for TabSettings {
         Self {
             new_tab_url: "about:blank".into(),
             closed_stack: 25,
+            sleep_after_minutes: 30,
+            memory_budget_mb: 2048,
         }
     }
 }

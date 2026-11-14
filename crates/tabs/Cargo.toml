@@ -8,3 +8,7 @@ license.workspace = true
 engine = { path = "../engine" }
 store = { path = "../store" }
 url = { workspace = true }
+jiff = { workspace = true }
+
+[dev-dependencies]
+jiff = { workspace = true }
