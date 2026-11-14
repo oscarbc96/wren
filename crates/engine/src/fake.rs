@@ -1,9 +1,12 @@
 //! In-memory `Engine` implementation used by tests.
 
 use crate::api::{
-    Engine, EngineEvent, EngineInput, MemoryRow, NavigationFilter, ProcessInfo, RequestFilter,
-    ViewRect, WebViewId,
+    ConsoleLevel, Engine, EngineEvent, EngineInput, EvalReply, MemoryRow, NavigationFilter,
+    ProcessInfo, RequestFilter, ScreenshotReply, ViewRect, WebViewId,
 };
+use image::{ImageBuffer, Rgba};
+use std::collections::HashMap;
+use std::io::Cursor;
 use url::Url;
 
 /// One recorded call made to a `FakeEngine`.
@@ -19,6 +22,8 @@ pub enum FakeCall {
     Hide { id: WebViewId },
     Input(WebViewId, EngineInput),
     RunScript { id: WebViewId, js: String },
+    Evaluate { id: WebViewId, js: String },
+    Screenshot { id: WebViewId },
     SetNavigationFilter,
     Spin,
     SetRequestFilter,
@@ -38,6 +43,9 @@ pub struct FakeEngine {
     navigation_filter: Option<NavigationFilter>,
     process_info: Vec<ProcessInfo>,
     memory_report: Vec<MemoryRow>,
+    eval_results: HashMap<WebViewId, Result<serde_json::Value, String>>,
+    pending_eval_replies: HashMap<WebViewId, Vec<EvalReply>>,
+    pending_screenshot_replies: HashMap<WebViewId, Vec<ScreenshotReply>>,
 }
 
 impl Default for FakeEngine {
@@ -53,6 +61,9 @@ impl Default for FakeEngine {
                 path: "js-heap".to_string(),
                 bytes: 1024,
             }],
+            eval_results: HashMap::new(),
+            pending_eval_replies: HashMap::new(),
+            pending_screenshot_replies: HashMap::new(),
         }
     }
 }
@@ -63,7 +74,19 @@ impl FakeEngine {
     }
 
     pub fn push(&mut self, ev: EngineEvent) {
+        if let EngineEvent::Crashed { id, .. } = ev {
+            self.fail_pending(id);
+        }
         self.pending.push(ev);
+    }
+
+    pub fn push_console(&mut self, id: WebViewId, level: ConsoleLevel, message: String) {
+        self.pending
+            .push(EngineEvent::Console { id, level, message });
+    }
+
+    pub fn set_eval_result(&mut self, id: WebViewId, result: Result<serde_json::Value, String>) {
+        self.eval_results.insert(id, result);
     }
 
     pub fn calls(&self) -> &[FakeCall] {
@@ -77,6 +100,28 @@ impl FakeEngine {
     pub fn set_memory_report(&mut self, rows: Vec<MemoryRow>) {
         self.memory_report = rows;
     }
+
+    fn fail_pending(&mut self, id: WebViewId) {
+        if let Some(replies) = self.pending_eval_replies.remove(&id) {
+            for reply in replies {
+                reply(Err("target crashed".to_string()));
+            }
+        }
+        if let Some(replies) = self.pending_screenshot_replies.remove(&id) {
+            for reply in replies {
+                reply(Err("target crashed".to_string()));
+            }
+        }
+    }
+
+    fn one_by_one_png() -> Vec<u8> {
+        let img: ImageBuffer<Rgba<u8>, Vec<u8>> =
+            ImageBuffer::from_pixel(1, 1, Rgba([255, 255, 255, 255]));
+        let mut buf = Cursor::new(Vec::new());
+        img.write_to(&mut buf, image::ImageFormat::Png)
+            .expect("png encode");
+        buf.into_inner()
+    }
 }
 
 impl Engine for FakeEngine {
@@ -88,6 +133,7 @@ impl Engine for FakeEngine {
     }
 
     fn close(&mut self, id: WebViewId) {
+        self.fail_pending(id);
         self.calls.push(FakeCall::Close { id });
     }
 
@@ -127,6 +173,23 @@ impl Engine for FakeEngine {
             id,
             js: js.to_string(),
         });
+    }
+
+    fn evaluate(&mut self, id: WebViewId, js: &str, reply: EvalReply) {
+        self.calls.push(FakeCall::Evaluate {
+            id,
+            js: js.to_string(),
+        });
+        if let Some(result) = self.eval_results.remove(&id) {
+            reply(result);
+        } else {
+            self.pending_eval_replies.entry(id).or_default().push(reply);
+        }
+    }
+
+    fn screenshot(&mut self, id: WebViewId, reply: ScreenshotReply) {
+        self.calls.push(FakeCall::Screenshot { id });
+        reply(Ok(Self::one_by_one_png()));
     }
 
     fn set_navigation_filter(&mut self, f: NavigationFilter) {

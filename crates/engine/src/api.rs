@@ -7,6 +7,22 @@ pub use adblock_rules::RequestKind;
 /// Closure used by [`Engine::set_request_filter`].
 pub type RequestFilter = Box<dyn Fn(&Url, &Url, RequestKind) -> bool>;
 
+/// Reply for [`Engine::evaluate`].
+pub type EvalReply = Box<dyn FnOnce(Result<serde_json::Value, String>)>;
+
+/// Reply for [`Engine::screenshot`], returning PNG bytes.
+pub type ScreenshotReply = Box<dyn FnOnce(Result<Vec<u8>, String>)>;
+
+/// Console message severity.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConsoleLevel {
+    Log,
+    Info,
+    Warn,
+    Error,
+    Debug,
+}
+
 /// Unique id for a web view managed by an `Engine`.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, serde::Serialize, serde::Deserialize,
@@ -67,6 +83,18 @@ pub enum EngineEvent {
     },
     Responsive {
         id: WebViewId,
+    },
+    Console {
+        id: WebViewId,
+        level: ConsoleLevel,
+        message: String,
+    },
+    Request {
+        id: WebViewId,
+        request_id: u64,
+        url: Url,
+        method: String,
+        is_document: bool,
     },
 }
 
@@ -181,6 +209,12 @@ pub trait Engine {
     fn hide(&mut self, id: WebViewId);
     fn input(&mut self, _id: WebViewId, _ev: EngineInput) {}
     fn run_script(&mut self, _id: WebViewId, _js: &str) {}
+    fn evaluate(&mut self, _id: WebViewId, _js: &str, reply: EvalReply) {
+        reply(Err("unsupported".to_string()));
+    }
+    fn screenshot(&mut self, _id: WebViewId, reply: ScreenshotReply) {
+        reply(Err("unsupported".to_string()));
+    }
     fn set_navigation_filter(&mut self, _f: NavigationFilter) {}
     fn spin(&mut self);
     fn drain_events(&mut self) -> Vec<EngineEvent>;
