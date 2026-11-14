@@ -308,5 +308,8 @@ fn cdp_off_by_default() {
     assert!(!settings.cdp.enabled);
     assert_eq!(settings.cdp.port, 9222);
     assert_eq!(wren::cdp_bridge::cdp_port(None, &settings.cdp), None);
-    assert_eq!(wren::cdp_bridge::cdp_port(Some(9333), &settings.cdp), Some(9333));
+    assert_eq!(
+        wren::cdp_bridge::cdp_port(Some(9333), &settings.cdp),
+        Some(9333)
+    );
 }
