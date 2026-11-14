@@ -33,6 +33,12 @@ pub fn run_with_args(args: Args) {
     let store = Arc::new(SqliteStore::open(&store_path).expect("open store"));
     let settings_store = SettingsStore::load(paths.clone());
     let settings = settings_store.current().clone();
+    let devtools_port = match args.devtools {
+        Some(0) => Some(settings.devtools.port),
+        Some(port) => Some(port),
+        None => settings.devtools.enabled.then_some(settings.devtools.port),
+    };
+    let settings_file = paths.settings.clone();
 
     let adblock_dir = data_dir.join("adblock");
     let mut cached_lists: Vec<String> = Vec::new();
@@ -107,7 +113,9 @@ pub fn run_with_args(args: Args) {
                         *screenshot_view_ptr.lock().unwrap() = Some(h.ns_view.as_ptr() as usize);
                     }
                     let waker: Arc<dyn Fn() + Send + Sync> = Arc::new(|| {});
-                    let mut engine = engine::ServoEngine::new(raw_wh, waker).expect("servo engine");
+                    let mut engine =
+                        engine::ServoEngine::with_devtools(raw_wh, waker, devtools_port)
+                            .expect("servo engine");
                     engine.set_hang_timeout(settings_for_win.hang.timeout_seconds);
                     if let Some(b) = &blocker {
                         let b = b.clone();
@@ -115,8 +123,9 @@ pub fn run_with_args(args: Args) {
                             b.should_block(url, source, kind)
                         }));
                     }
+                    let settings_file = settings_file.clone();
                     cx.new(|cx| {
-                        if urls_for_win.is_empty() {
+                        let mut view = if urls_for_win.is_empty() {
                             BrowserWindow::new(
                                 engine,
                                 store_for_win.clone(),
@@ -131,7 +140,9 @@ pub fn run_with_args(args: Args) {
                                 urls_for_win.clone(),
                                 cx,
                             )
-                        }
+                        };
+                        view.set_devtools_state(devtools_port, Some(settings_file));
+                        view
                     })
                 }
             })
@@ -244,6 +255,7 @@ fn register_actions(cx: &mut App) {
         KeyBinding::new("cmd-d", actions::Toggle, None),
         KeyBinding::new("cmd-shift-o", actions::OpenInChrome, None),
         KeyBinding::new("cmd-\\", actions::Fill, None),
+        KeyBinding::new("cmd-alt-i", actions::devtools::Toggle, None),
         KeyBinding::new("cmd-alt-escape", crate::task_manager::Toggle, None),
         KeyBinding::new("cmd-1", actions::Select1, None),
         KeyBinding::new("cmd-2", actions::Select2, None),

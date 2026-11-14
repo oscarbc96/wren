@@ -14,6 +14,12 @@ actions!(passwords, [Fill, ImportChrome, ImportCsv]);
 actions!(site, [OpenInChrome, AlwaysOpenInChrome]);
 actions!(app, [Quit]);
 
+/// `devtools::Toggle` lives in its own module: `bookmark::Toggle` already uses
+/// the `Toggle` name here.
+pub mod devtools {
+    gpui::actions!(devtools, [Toggle]);
+}
+
 /// Maps a `tab::SelectN` action to its 0-based tab index. `tab::Select9` means
 /// the last tab, which the caller resolves from the strip length.
 pub fn select_action_index(action: &str) -> Option<usize> {

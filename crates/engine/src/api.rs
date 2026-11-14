@@ -161,5 +161,8 @@ pub trait Engine {
     fn processes(&mut self) -> Vec<ProcessInfo> {
         Vec::new()
     }
+    fn set_devtools(&mut self, _port: Option<u16>) -> anyhow::Result<()> {
+        Ok(())
+    }
     fn shutdown(&mut self) {}
 }

@@ -24,6 +24,7 @@ pub enum FakeCall {
     SetRequestFilter,
     Kill { id: WebViewId },
     Processes,
+    SetDevtools { port: Option<u16> },
     DrainEvents,
 }
 
@@ -125,6 +126,11 @@ impl Engine for FakeEngine {
     fn processes(&mut self) -> Vec<ProcessInfo> {
         self.calls.push(FakeCall::Processes);
         self.process_info.clone()
+    }
+
+    fn set_devtools(&mut self, port: Option<u16>) -> anyhow::Result<()> {
+        self.calls.push(FakeCall::SetDevtools { port });
+        Ok(())
     }
 
     fn drain_events(&mut self) -> Vec<EngineEvent> {

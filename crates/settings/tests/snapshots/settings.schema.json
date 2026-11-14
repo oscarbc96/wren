@@ -48,6 +48,13 @@
       "default": {
         "timeout_seconds": 5
       }
+    },
+    "devtools": {
+      "$ref": "#/$defs/DevtoolsSettings",
+      "default": {
+        "enabled": false,
+        "port": 6000
+      }
     }
   },
   "$defs": {
@@ -134,6 +141,24 @@
           "format": "uint64",
           "minimum": 0,
           "default": 5
+        }
+      }
+    },
+    "DevtoolsSettings": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "description": "Start Servo's remote debugging server (Firefox DevTools) at launch.",
+          "type": "boolean",
+          "default": false
+        },
+        "port": {
+          "description": "Port on 127.0.0.1.",
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0,
+          "maximum": 65535,
+          "default": 6000
         }
       }
     }

@@ -399,6 +399,8 @@ pub struct ServoEngine {
     framed: Rc<std::cell::RefCell<HashSet<WebViewId>>>,
     /// Web views to hide once they have produced their first frame.
     pending_hide: std::cell::RefCell<HashSet<WebViewId>>,
+    /// Port of the remote debugging server started with Servo, if any.
+    devtools_port: Option<u16>,
 }
 
 impl ServoEngine {
@@ -406,6 +408,17 @@ impl ServoEngine {
     pub fn new(
         parent: raw_window_handle::WindowHandle<'_>,
         waker: Arc<dyn Fn() + Send + Sync>,
+    ) -> Result<Self> {
+        Self::with_devtools(parent, waker, None)
+    }
+
+    /// Like `new`, with Servo's remote debugging server listening on
+    /// `127.0.0.1:<port>` when `devtools_port` is set. Servo 0.8 starts that
+    /// server only at startup, so it cannot be toggled later.
+    pub fn with_devtools(
+        parent: raw_window_handle::WindowHandle<'_>,
+        waker: Arc<dyn Fn() + Send + Sync>,
+        devtools_port: Option<u16>,
     ) -> Result<Self> {
         let parent_ptr = match parent.as_raw() {
             RawWindowHandle::AppKit(h) => h.ns_view.as_ptr(),
@@ -454,8 +467,14 @@ impl ServoEngine {
             multiprocess: true,
             ..Opts::default()
         };
+        let mut prefs = servo::Preferences::default();
+        if let Some(port) = devtools_port {
+            prefs.devtools_server_enabled = true;
+            prefs.devtools_server_listen_address = format!("127.0.0.1:{port}");
+        }
         let servo = ServoBuilder::default()
             .opts(opts)
+            .preferences(prefs)
             .event_loop_waker(Box::new(WakerImpl(waker)))
             .build();
         servo.setup_logging();
@@ -477,6 +496,7 @@ impl ServoEngine {
             shown: None,
             navigation_filter: Rc::new(std::cell::RefCell::new(None)),
             surface_size: None,
+            devtools_port,
             view_sizes: HashMap::new(),
             frame_ready: Rc::new(std::cell::Cell::new(true)),
             framed: Rc::new(std::cell::RefCell::new(HashSet::new())),
@@ -882,6 +902,14 @@ impl Engine for ServoEngine {
             }
         }
         out
+    }
+
+    fn set_devtools(&mut self, port: Option<u16>) -> anyhow::Result<()> {
+        if port == self.devtools_port {
+            Ok(())
+        } else {
+            anyhow::bail!("Servo starts or stops DevTools only at launch")
+        }
     }
 
     fn drain_events(&mut self) -> Vec<EngineEvent> {

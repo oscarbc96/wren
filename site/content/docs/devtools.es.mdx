@@ -1,0 +1,29 @@
+---
+title: Herramientas de desarrollo
+description: Inspecciona páginas con el servidor de depuración remota de Servo y las herramientas de Firefox.
+---
+
+Wren puede exponer el servidor de depuración remota de Servo para que
+inspecciones páginas con las DevTools de Firefox. El servidor solo escucha
+en `127.0.0.1`.
+
+## Activarlo
+
+- Para una sesión: abre Wren con `--devtools` (puerto de la configuración)
+  o `--devtools 6123`.
+- Siempre: pon `"devtools": { "enabled": true }` en `settings.json`, o
+  pulsa `Cmd+Alt+I`, que guarda ese ajuste por ti.
+- Puerto: `devtools.port`, por defecto `6000`.
+
+Servo 0.8 solo arranca su servidor de depuración al iniciar el motor, así
+que `Cmd+Alt+I` se aplica en el siguiente arranque. La barra de
+herramientas muestra "DevTools on :6000" mientras el servidor funciona e
+indica cuándo un cambio espera a un reinicio.
+
+## Conectar desde Firefox
+
+1. Abre Wren con DevTools activado.
+2. En Firefox, abre `about:debugging` y luego Setup.
+3. Añade la ubicación de red `127.0.0.1:6000` (usa la IP: en macOS
+   `localhost` puede llegar al receptor de AirPlay).
+4. Conecta y elige la pestaña que quieres inspeccionar.

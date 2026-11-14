@@ -42,6 +42,12 @@ pub struct BrowserWindow<E: Engine + 'static, S: Store + 'static> {
     pub active_downloads: usize,
     pub download_progress: Option<(u64, Option<u64>)>,
     pub task_manager_open: bool,
+    /// DevTools wanted at the next launch (`devtools.enabled`).
+    pub devtools_enabled: bool,
+    /// Port of the DevTools server running now, if Servo started one.
+    pub devtools_running: Option<u16>,
+    /// User settings file the DevTools toggle writes to; `None` in tests.
+    settings_file: Option<std::path::PathBuf>,
     content_origin: Point<Pixels>,
     last_save: Option<Instant>,
     dirty_since: Option<Instant>,
@@ -198,6 +204,9 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
             active_downloads: 0,
             download_progress: None,
             task_manager_open: false,
+            devtools_enabled: false,
+            devtools_running: None,
+            settings_file: None,
             content_origin: Point {
                 x: px(0.),
                 y: px(0.),
@@ -307,6 +316,51 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
             let _ = self.store.toggle_bookmark(&tab.url, &tab.title);
             self.toolbar.is_bookmarked = self.store.is_bookmarked(&tab.url).unwrap_or(false);
         }
+    }
+
+    /// Records the DevTools server started with the engine and where the
+    /// toggle persists its choice.
+    pub fn set_devtools_state(
+        &mut self,
+        running: Option<u16>,
+        settings_file: Option<std::path::PathBuf>,
+    ) {
+        self.devtools_running = running;
+        self.devtools_enabled = running.is_some();
+        self.settings_file = settings_file;
+        self.update_devtools_indicator();
+    }
+
+    /// Flips `devtools.enabled`. Servo starts its DevTools server only at
+    /// launch, so the change applies on the next start; the toolbar says so.
+    pub fn toggle_devtools(&mut self) {
+        self.devtools_enabled = !self.devtools_enabled;
+        let port = self.settings.devtools.port;
+        self.settings.devtools.enabled = self.devtools_enabled;
+        let requested = self.devtools_enabled.then_some(port);
+        let _ = self.engine.set_devtools(requested);
+        if let Some(path) = &self.settings_file {
+            let text = std::fs::read_to_string(path).unwrap_or_default();
+            let value = if self.devtools_enabled {
+                "true"
+            } else {
+                "false"
+            };
+            if let Some(updated) = settings::update_value(&text, &["devtools", "enabled"], value) {
+                let _ = std::fs::write(path, updated);
+            }
+        }
+        self.update_devtools_indicator();
+    }
+
+    fn update_devtools_indicator(&mut self) {
+        let port = self.settings.devtools.port;
+        self.toolbar.devtools_indicator = match (self.devtools_running, self.devtools_enabled) {
+            (Some(p), true) => Some(format!("DevTools on :{p}")),
+            (Some(p), false) => Some(format!("DevTools on :{p} (off after restart)")),
+            (None, true) => Some(format!("DevTools on :{port} after restart")),
+            (None, false) => None,
+        };
     }
 
     pub fn toggle_task_manager(&mut self) {
@@ -1088,6 +1142,21 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
                                 url_display
                             }),
                     )
+                    .when_some(self.toolbar.devtools_indicator.clone(), |d, indicator| {
+                        d.child(
+                            div()
+                                .id("devtools-indicator")
+                                .px(px(8.))
+                                .h(px(24.))
+                                .flex()
+                                .items_center()
+                                .rounded_md()
+                                .bg(theme.surface)
+                                .text_size(px(12.))
+                                .text_color(theme.text)
+                                .child(indicator),
+                        )
+                    })
                     .child(
                         div()
                             .id("star")
@@ -1804,6 +1873,12 @@ impl<E: Engine + 'static, S: Store + 'static> Render for BrowserWindow<E, S> {
             .on_action(cx.listener(
                 |this: &mut Self, _: &crate::task_manager::Toggle, _window, _cx| {
                     this.toggle_task_manager();
+                },
+            ))
+            .on_action(cx.listener(
+                |this: &mut Self, _: &crate::actions::devtools::Toggle, _window, cx| {
+                    this.toggle_devtools();
+                    cx.notify();
                 },
             ))
     }

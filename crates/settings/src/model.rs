@@ -147,6 +147,24 @@ impl Default for HangSettings {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct DevtoolsSettings {
+    /// Start Servo's remote debugging server (Firefox DevTools) at launch.
+    pub enabled: bool,
+    /// Port on 127.0.0.1.
+    pub port: u16,
+}
+
+impl Default for DevtoolsSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            port: 6000,
+        }
+    }
+}
+
 /// All user-visible settings.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
@@ -158,4 +176,5 @@ pub struct Settings {
     pub adblock: AdblockSettings,
     pub downloads: DownloadsSettings,
     pub hang: HangSettings,
+    pub devtools: DevtoolsSettings,
 }
