@@ -1,8 +1,8 @@
 //! Servo-backed `Engine` implementation.
 
 use crate::api::{
-    Engine, EngineEvent, EngineInput, LoadState, Modifiers, MouseButton, RequestFilter, RequestKind,
-    ViewRect, WebViewId,
+    Engine, EngineEvent, EngineInput, LoadState, Modifiers, MouseButton, RequestFilter,
+    RequestKind, ViewRect, WebViewId,
 };
 use anyhow::{Context, Result};
 use dpi::PhysicalSize;

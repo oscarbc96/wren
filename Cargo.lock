@@ -150,7 +150,7 @@ dependencies = [
 
 [[package]]
 name = "adblock_rules"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "adblock",
  "anyhow",
@@ -1531,7 +1531,7 @@ dependencies = [
 
 [[package]]
 name = "components"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "gpui-ce",
  "gpui_ce_elements",
@@ -1812,7 +1812,7 @@ dependencies = [
 
 [[package]]
 name = "creds"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "aes",
  "anyhow",
@@ -2384,7 +2384,7 @@ checksum = "66b7e2430c6dff6a955451e2cfc438f09cea1965a9d6f87f7e3b90decc014099"
 
 [[package]]
 name = "engine"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "adblock_rules",
  "anyhow",
@@ -6478,7 +6478,7 @@ dependencies = [
 
 [[package]]
 name = "omnibox"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "idna",
  "jiff",
@@ -6648,7 +6648,7 @@ checksum = "6e6eb142958d64335fb0e345c5b9ead2ecd6fc438c307e9d7d3c4fd428dbaf12"
 
 [[package]]
 name = "parity"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -9792,7 +9792,7 @@ dependencies = [
 
 [[package]]
 name = "settings"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "dirs 7.0.0",
  "gpui-ce",
@@ -10116,7 +10116,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "store"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "jiff",
  "rusqlite",
@@ -10607,7 +10607,7 @@ dependencies = [
 
 [[package]]
 name = "tabs"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "engine",
  "store",
@@ -10711,7 +10711,7 @@ dependencies = [
 
 [[package]]
 name = "themes"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "gpui-ce",
  "serde",
@@ -12992,7 +12992,7 @@ dependencies = [
 
 [[package]]
 name = "wren"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "adblock_rules",
  "anyhow",

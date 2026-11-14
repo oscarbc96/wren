@@ -1,8 +1,6 @@
 //! In-memory `Engine` implementation used by tests.
 
-use crate::api::{
-    Engine, EngineEvent, EngineInput, RequestFilter, ViewRect, WebViewId,
-};
+use crate::api::{Engine, EngineEvent, EngineInput, RequestFilter, ViewRect, WebViewId};
 use url::Url;
 
 /// One recorded call made to a `FakeEngine`.

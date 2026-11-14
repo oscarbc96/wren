@@ -9,7 +9,7 @@
 
 ### Features
 
-* **creds:** keychain passwords, chrome and csv import, fill ([#28](https://github.com/oscarbc96/wren/issues/28)) ([9caf9ad](https://github.com/oscarbc96/wren/commit/9caf9adbddeb90a2330df27f3576ae388048dcc2))
+* **creds:** keychain passwords, chrome and csv import, fill ([#28](https://github.com/oscarbc96/wren/issues/28)) ([9calf9ad](https://github.com/oscarbc96/wren/commit/9caf9adbddeb90a2330df27f3576ae388048dcc2))
 * **engine:** engine trait and fake engine ([#11](https://github.com/oscarbc96/wren/issues/11)) ([f3e2c41](https://github.com/oscarbc96/wren/commit/f3e2c4186f87981808a2616c3db76931b6034f4a))
 * **engine:** page input through the Engine trait ([#21](https://github.com/oscarbc96/wren/issues/21)) ([12f177a](https://github.com/oscarbc96/wren/commit/12f177a535f83544b8c9f54a496c75b00ed5e1ec))
 * **engine:** Servo engine with one content process per tab ([#19](https://github.com/oscarbc96/wren/issues/19)) ([d83dd5d](https://github.com/oscarbc96/wren/commit/d83dd5d1974e1144e4a2a0078875b3b162d145ce))

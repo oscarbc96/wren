@@ -46,9 +46,7 @@ pub fn run_with_args(args: Args) {
     }
     let blocker = if settings.adblock.enabled {
         let refs: Vec<&str> = cached_lists.iter().map(|s| s.as_str()).collect();
-        Some(std::rc::Rc::new(adblock_rules::Blocker::from_lists(
-            &refs,
-        )))
+        Some(std::rc::Rc::new(adblock_rules::Blocker::from_lists(&refs)))
     } else {
         None
     };
