@@ -24,6 +24,12 @@
         "sleep_after_minutes": 30,
         "memory_budget_mb": 2048
       }
+    },
+    "adblock": {
+      "$ref": "#/$defs/AdblockSettings",
+      "default": {
+        "enabled": true
+      }
     }
   },
   "$defs": {
@@ -69,6 +75,15 @@
           "format": "uint64",
           "minimum": 0,
           "default": 2048
+        }
+      }
+    },
+    "AdblockSettings": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
         }
       }
     }
