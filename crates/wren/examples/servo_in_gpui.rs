@@ -65,7 +65,9 @@ impl RootView {
                     ..
                 } => println!("LOAD_FAILED {reason}"),
                 EngineEvent::Crashed { reason, .. } => println!("CRASHED {reason}"),
-                EngineEvent::History { .. } | EngineEvent::OpenTab { .. } => {}
+                EngineEvent::History { .. }
+                | EngineEvent::OpenTab { .. }
+                | EngineEvent::Audible { .. } => {}
             }
         }
 

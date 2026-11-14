@@ -236,6 +236,16 @@ impl WebViewDelegate for Delegate {
         });
     }
 
+    fn notify_media_session_event(&self, _webview: WebView, event: servo::MediaSessionEvent) {
+        // Only playback state changes say whether the tab is audible.
+        if let servo::MediaSessionEvent::PlaybackStateChange(state) = event {
+            self.events.push(EngineEvent::Audible {
+                id: self.id,
+                playing: matches!(state, servo::MediaSessionPlaybackState::Playing),
+            });
+        }
+    }
+
     fn request_create_new(&self, _parent_webview: WebView, request: CreateNewWebViewRequest) {
         // Servo 0.8 does not expose the target URL on this request; emit an
         // OpenTab request and deny Servo-side creation.

@@ -42,6 +42,10 @@ pub enum EngineEvent {
         opener: WebViewId,
         url: Url,
     },
+    Audible {
+        id: WebViewId,
+        playing: bool,
+    },
 }
 
 /// Rectangle in points for showing a web view.
