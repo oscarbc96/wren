@@ -350,9 +350,16 @@ async fn destroyed_target_detaches_session_and_keeps_connection() {
             }
         }
     }
-    assert_eq!(methods, vec!["Target.detachedFromTarget", "Target.targetDestroyed"]);
+    assert_eq!(
+        methods,
+        vec!["Target.detachedFromTarget", "Target.targetDestroyed"]
+    );
 
-    ws_send(&mut ws, json!({"id":3,"method":"Target.getTargets","params":{}})).await;
+    ws_send(
+        &mut ws,
+        json!({"id":3,"method":"Target.getTargets","params":{}}),
+    )
+    .await;
     loop {
         let msg = ws_recv_json(&mut ws).await;
         if msg["id"] == 3 {
