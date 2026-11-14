@@ -1,10 +1,4 @@
 {
   "title": "Documentaci\u00f3n",
-  "pages": [
-    "index",
-    "roadmap",
-    "build",
-    "contributing",
-    "devtools"
-  ]
+  "pages": ["index", "roadmap", "build", "contributing", "devtools"]
 }
