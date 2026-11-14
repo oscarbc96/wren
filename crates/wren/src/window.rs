@@ -3,9 +3,7 @@ use std::time::{Duration, Instant};
 
 use crate::open_in_chrome::{self, Opener, SystemOpener};
 
-use engine::{
-    Engine, EngineEvent, EngineInput, LoadState, Modifiers, MouseButton, ViewRect, WebViewId,
-};
+use engine::{Engine, EngineEvent, EngineInput, LoadState, Modifiers, MouseButton, WebViewId};
 use gpui::{
     App, ClickEvent, Context, FocusHandle, Focusable, KeyDownEvent, KeyUpEvent,
     MouseButton as GpuiMouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point,
@@ -313,22 +311,16 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
         self.strip.reload_crashed(&mut self.engine, id);
     }
 
-    pub fn tick(&mut self, window: &mut Window, _cx: &mut Context<Self>) {
+    pub fn tick(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let bounds = window.bounds();
         let w = f32::from(bounds.size.width).max(1.0);
         let h = f32::from(bounds.size.height).max(1.0);
         let chrome_h = self.toolbar.chrome_height();
-        let content_h = (h - chrome_h).max(1.0);
         self.content_origin = Point {
             x: bounds.origin.x,
             y: bounds.origin.y + px(chrome_h),
         };
-        let rect = ViewRect {
-            x: 0.0,
-            y: chrome_h,
-            width: w,
-            height: content_h,
-        };
+        let rect = crate::layout::content_rect((w, h), 0.0, chrome_h);
         if let Some(active) = self.active_tab().cloned() {
             if active.crashed.is_none() {
                 self.engine.show(active.webview, rect);
@@ -344,6 +336,15 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
 
         self.engine.spin();
         let events = self.engine.drain_events();
+        if std::env::var_os("WREN_DEBUG_EVENTS").is_some() {
+            for e in &events {
+                eprintln!("WREN_EVENT {e:?}");
+            }
+        }
+        // Engine events change titles, URLs and load state: redraw the chrome.
+        if !events.is_empty() {
+            cx.notify();
+        }
         for ev in events {
             self.handle_event(&ev);
         }
@@ -636,11 +637,15 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
     }
 
     fn render_chrome(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.global::<ActiveTheme>().clone();
+        let chrome_h = self.toolbar.chrome_height();
         let mut col = div()
+            .relative()
             .flex()
             .flex_col()
             .w_full()
-            .h(px(self.toolbar.chrome_height()))
+            .h(px(chrome_h))
+            .bg(theme.background)
             .child(self.render_tab_strip(cx));
         if let Some(menu_id) = self.tab_menu {
             let pinned = self
@@ -652,11 +657,19 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
                 .unwrap_or(false);
             col = col.child(
                 div()
+                    .absolute()
+                    .top(px(34.0))
+                    .left(px(80.0))
                     .flex()
                     .items_center()
-                    .gap(px(8.))
-                    .px(px(8.))
-                    .h(px(24.))
+                    .gap(px(8.0))
+                    .px(px(8.0))
+                    .py(px(4.0))
+                    .rounded_md()
+                    .bg(theme.surface)
+                    .border_1()
+                    .border_color(theme.border)
+                    .shadow_lg()
                     .child(
                         div()
                             .id("tab-menu-pin")
@@ -700,6 +713,7 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
     }
 
     fn render_tab_strip(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.global::<ActiveTheme>().clone();
         let tabs = self.strip.tabs().to_vec();
         let active_id = self.strip.active();
         let mut children: Vec<gpui::AnyElement> = Vec::new();
@@ -714,18 +728,29 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
             } else {
                 truncate_text(&tab.title, 24)
             };
+            let host_letter = tab
+                .url
+                .host_str()
+                .and_then(|h| h.chars().next())
+                .map(|c| c.to_ascii_uppercase().to_string())
+                .unwrap_or_else(|| "?".to_string());
             let is_slept = tab.state == TabState::Slept;
             children.push(
                 div()
                     .id(("tab", i))
-                    .h(px(24.))
+                    .group("tab")
+                    .h(px(30.0))
+                    .min_w(px(120.0))
+                    .max_w(px(220.0))
                     .flex()
                     .items_center()
-                    .gap(px(6.))
-                    .px(px(8.))
-                    .rounded_lg()
+                    .gap(px(6.0))
+                    .px(px(8.0))
+                    .rounded_md()
                     .cursor_pointer()
-                    .when(selected, |style| style.bg(gpui::white()))
+                    .when(selected, |style| style.bg(theme.surface))
+                    .when(!selected, |style| style.bg(gpui::transparent_black()))
+                    .hover(|style| style.bg(theme.surface))
                     .when(is_slept, |style| style.opacity(0.5))
                     .on_click(
                         cx.listener(move |this: &mut Self, _: &ClickEvent, _window, _cx| {
@@ -749,17 +774,44 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
                             this.tab_menu = Some(id);
                         }),
                     )
-                    .child(label)
+                    .child(
+                        div()
+                            .w(px(16.0))
+                            .h(px(16.0))
+                            .rounded_sm()
+                            .bg(theme.accent)
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .text_size(px(10.0))
+                            .text_color(theme.accent_text)
+                            .child(host_letter),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .text_size(px(13.0))
+                            .text_color(theme.text)
+                            .child(label),
+                    )
                     .child(
                         div()
                             .id(("tab-close", i))
+                            .w(px(16.0))
+                            .h(px(16.0))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded_sm()
                             .cursor_pointer()
+                            .opacity(if selected { 1.0 } else { 0.0 })
+                            .group_hover("tab", |style| style.opacity(1.0))
                             .on_click(cx.listener(
                                 move |this: &mut Self, _: &ClickEvent, _window, _cx| {
                                     this.close_tab(id);
                                 },
                             ))
-                            .child("x"),
+                            .child("×"),
                     )
                     .into_any_element(),
             );
@@ -767,20 +819,25 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
         div()
             .flex()
             .items_center()
-            .h(px(32.))
+            .h(px(38.0))
             .w_full()
-            .gap(px(4.))
+            .pl(px(86.0))
+            .gap(px(6.0))
+            .bg(theme.background)
             .children(children)
             .child(
                 div()
                     .id("new-tab")
-                    .h(px(24.))
-                    .w(px(28.))
+                    .h(px(28.0))
+                    .w(px(28.0))
                     .flex()
                     .items_center()
                     .justify_center()
-                    .rounded_lg()
+                    .rounded_md()
                     .cursor_pointer()
+                    .text_size(px(16.0))
+                    .text_color(theme.muted_text)
+                    .hover(|style| style.bg(theme.surface))
                     .on_click(
                         cx.listener(|this: &mut Self, _: &ClickEvent, _window, _cx| {
                             this.new_tab(false);
@@ -791,7 +848,7 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
     }
 
     fn render_toolbar(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.global::<ActiveTheme>();
+        let theme = cx.global::<ActiveTheme>().clone();
         let can_back = self.toolbar.can_back;
         let can_forward = self.toolbar.can_forward;
         let loading = self.toolbar.loading;
@@ -803,7 +860,6 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
         } else {
             self.omnibox_text.clone()
         };
-        let title = self.toolbar.title.clone();
         let mut suggestions = Vec::new();
         if self.omnibox_focused && !self.suggestions.is_empty() {
             for (i, s) in self.suggestions.iter().enumerate() {
@@ -811,8 +867,8 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
                 suggestions.push(
                     div()
                         .id(("suggest", i))
-                        .px(px(8.))
-                        .py(px(4.))
+                        .px(px(8.0))
+                        .py(px(4.0))
                         .cursor_pointer()
                         .on_click(cx.listener(
                             move |this: &mut Self, _: &ClickEvent, _window, _cx| {
@@ -826,54 +882,85 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
             }
         }
 
+        let icon_button = |id: &'static str, label: &'static str, enabled: bool| {
+            div()
+                .id(id)
+                .w(px(28.0))
+                .h(px(28.0))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded_md()
+                .cursor_pointer()
+                .opacity(if enabled { 1.0 } else { 0.4 })
+                .child(label)
+        };
+
         div()
             .flex()
             .flex_col()
             .w_full()
+            .bg(theme.background)
             .child(
                 div()
-                    .h(px(40.))
+                    .h(px(40.0))
                     .w_full()
                     .flex()
                     .items_center()
-                    .gap(px(8.))
-                    .px(px(8.))
+                    .gap(px(8.0))
+                    .px(px(8.0))
                     .child(
-                        div()
-                            .id("back")
-                            .cursor_pointer()
-                            .when(can_back, |s| s.opacity(1.0))
-                            .when(!can_back, |s| s.opacity(0.4))
-                            .on_click(cx.listener(
-                                |this: &mut Self, _: &ClickEvent, _window, _cx| {
-                                    this.back_active();
-                                },
-                            ))
-                            .child("<"),
+                        icon_button("back", "\u{2190}", can_back).on_click(cx.listener(
+                            |this: &mut Self, _: &ClickEvent, _window, _cx| {
+                                this.back_active();
+                            },
+                        )),
                     )
                     .child(
-                        div()
-                            .id("forward")
-                            .cursor_pointer()
-                            .when(can_forward, |s| s.opacity(1.0))
-                            .when(!can_forward, |s| s.opacity(0.4))
-                            .on_click(cx.listener(
-                                |this: &mut Self, _: &ClickEvent, _window, _cx| {
-                                    this.forward_active();
-                                },
-                            ))
-                            .child(">"),
+                        icon_button("forward", "\u{2192}", can_forward).on_click(cx.listener(
+                            |this: &mut Self, _: &ClickEvent, _window, _cx| {
+                                this.forward_active();
+                            },
+                        )),
                     )
                     .child(
                         div()
                             .id("reload")
+                            .w(px(28.0))
+                            .h(px(28.0))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded_md()
                             .cursor_pointer()
                             .on_click(cx.listener(
                                 |this: &mut Self, _: &ClickEvent, _window, _cx| {
                                     this.reload_active();
                                 },
                             ))
-                            .child(if loading { "Stop" } else { "Reload" }),
+                            .child(if loading { "\u{25A0}" } else { "\u{21BB}" }),
+                    )
+                    .child(
+                        div()
+                            .id("url-display")
+                            .flex_1()
+                            .h(px(30.0))
+                            .px(px(12.0))
+                            .flex()
+                            .items_center()
+                            .rounded_md()
+                            .border_1()
+                            .border_color(theme.border)
+                            .bg(theme.surface)
+                            .cursor_text()
+                            .on_click(cx.listener(|this: &mut Self, _: &ClickEvent, window, cx| {
+                                this.focus_omnibox_window(window, cx);
+                            }))
+                            .child(if url_display.is_empty() {
+                                "Search or enter address".to_string()
+                            } else {
+                                url_display
+                            }),
                     )
                     .child(
                         div()
@@ -884,50 +971,7 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
                                     this.toggle_bookmark();
                                 },
                             ))
-                            .child(if bookmarked { "*" } else { "☆" }),
-                    )
-                    .child(
-                        div()
-                            .id("open-in-chrome")
-                            .cursor_pointer()
-                            .on_click(cx.listener(
-                                |this: &mut Self, _: &ClickEvent, _window, _cx| {
-                                    this.open_active_in_chrome();
-                                },
-                            ))
-                            .child("Chrome"),
-                    )
-                    .child(
-                        div()
-                            .id("always-open-in-chrome")
-                            .cursor_pointer()
-                            .on_click(cx.listener(
-                                |this: &mut Self, _: &ClickEvent, _window, _cx| {
-                                    this.always_open_active_in_chrome();
-                                },
-                            ))
-                            .child("Always open this site in Chrome"),
-                    )
-                    .child(
-                        div()
-                            .id("url-display")
-                            .flex_1()
-                            .px(px(8.))
-                            .py(px(4.))
-                            .rounded_md()
-                            .bg(gpui::white())
-                            .cursor_text()
-                            .on_click(cx.listener(|this: &mut Self, _: &ClickEvent, window, cx| {
-                                this.focus_omnibox_window(window, cx);
-                            }))
-                            .child(url_display),
-                    )
-                    .child(
-                        div()
-                            .w(px(140.))
-                            .text_sm()
-                            .text_color(theme.text)
-                            .child(self.site_notice.clone().unwrap_or(title)),
+                            .child(if bookmarked { "*" } else { "\u{2606}" }),
                     ),
             )
             .when(!suggestions.is_empty(), |d| {
@@ -936,8 +980,8 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
                         .flex()
                         .flex_col()
                         .w_full()
-                        .px(px(8.))
-                        .bg(gpui::white())
+                        .px(px(8.0))
+                        .bg(theme.surface)
                         .children(suggestions),
                 )
             })
@@ -1545,3 +1589,5 @@ fn truncate_text(text: &str, max: usize) -> String {
     }
     out
 }
+
+pub use crate::layout::content_rect;
