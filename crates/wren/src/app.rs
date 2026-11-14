@@ -86,6 +86,7 @@ pub fn run_with_args(args: Args) {
                     .expect("raw window handle");
                 let waker: Arc<dyn Fn() + Send + Sync> = Arc::new(|| {});
                 let mut engine = engine::ServoEngine::new(raw_wh, waker).expect("servo engine");
+                engine.set_hang_timeout(settings_for_win.hang.timeout_seconds);
                 if let Some(b) = &blocker {
                     let b = b.clone();
                     engine.set_request_filter(Box::new(move |url, source, kind| {
@@ -175,6 +176,7 @@ fn register_actions(cx: &mut App) {
         KeyBinding::new("cmd-d", actions::Toggle, None),
         KeyBinding::new("cmd-shift-o", actions::OpenInChrome, None),
         KeyBinding::new("cmd-\\", actions::Fill, None),
+        KeyBinding::new("cmd-alt-escape", crate::task_manager::Toggle, None),
         KeyBinding::new("cmd-1", actions::Select1, None),
         KeyBinding::new("cmd-2", actions::Select2, None),
         KeyBinding::new("cmd-3", actions::Select3, None),

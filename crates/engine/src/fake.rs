@@ -1,7 +1,8 @@
 //! In-memory `Engine` implementation used by tests.
 
 use crate::api::{
-    Engine, EngineEvent, EngineInput, NavigationFilter, RequestFilter, ViewRect, WebViewId,
+    Engine, EngineEvent, EngineInput, NavigationFilter, ProcessInfo, RequestFilter, ViewRect,
+    WebViewId,
 };
 use url::Url;
 
@@ -21,6 +22,8 @@ pub enum FakeCall {
     SetNavigationFilter,
     Spin,
     SetRequestFilter,
+    Kill { id: WebViewId },
+    Processes,
     DrainEvents,
 }
 
@@ -31,6 +34,7 @@ pub struct FakeEngine {
     pending: Vec<EngineEvent>,
     calls: Vec<FakeCall>,
     navigation_filter: Option<NavigationFilter>,
+    process_info: Vec<ProcessInfo>,
 }
 
 impl FakeEngine {
@@ -44,6 +48,10 @@ impl FakeEngine {
 
     pub fn calls(&self) -> &[FakeCall] {
         &self.calls
+    }
+
+    pub fn set_processes(&mut self, info: Vec<ProcessInfo>) {
+        self.process_info = info;
     }
 }
 
@@ -108,6 +116,15 @@ impl Engine for FakeEngine {
 
     fn set_request_filter(&mut self, _f: RequestFilter) {
         self.calls.push(FakeCall::SetRequestFilter);
+    }
+
+    fn kill(&mut self, id: WebViewId) {
+        self.calls.push(FakeCall::Kill { id });
+    }
+
+    fn processes(&mut self) -> Vec<ProcessInfo> {
+        self.calls.push(FakeCall::Processes);
+        self.process_info.clone()
     }
 
     fn drain_events(&mut self) -> Vec<EngineEvent> {

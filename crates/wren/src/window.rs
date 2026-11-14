@@ -37,6 +37,7 @@ pub struct BrowserWindow<E: Engine + 'static, S: Store + 'static> {
     pub password_status: Option<String>,
     pub site_notice: Option<String>,
     pub tab_menu: Option<TabId>,
+    pub task_manager_open: bool,
     content_origin: Point<Pixels>,
     last_save: Option<Instant>,
     dirty_since: Option<Instant>,
@@ -185,6 +186,7 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
             password_status: None,
             site_notice: None,
             tab_menu: None,
+            task_manager_open: false,
             content_origin: Point {
                 x: px(0.),
                 y: px(0.),
@@ -290,6 +292,20 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
         if let Some(tab) = self.active_tab().cloned() {
             let _ = self.store.toggle_bookmark(&tab.url, &tab.title);
             self.toolbar.is_bookmarked = self.store.is_bookmarked(&tab.url).unwrap_or(false);
+        }
+    }
+
+    pub fn toggle_task_manager(&mut self) {
+        self.task_manager_open = !self.task_manager_open;
+    }
+
+    pub fn end_process_for_tab(&mut self, webview: WebViewId) {
+        self.engine.kill(webview);
+    }
+
+    pub fn wait_hung_tab(&mut self, id: TabId) {
+        if let Some(tab) = self.strip.tabs_mut().iter_mut().find(|t| t.id == id) {
+            tab.hung = false;
         }
     }
 
@@ -987,6 +1003,58 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
     }
 
     fn render_content(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.task_manager_open {
+            let processes = self.engine.processes();
+            let rows = crate::task_manager::rows(processes, &self.strip);
+            let mut items = Vec::new();
+            for (i, row) in rows.iter().enumerate() {
+                let label = format!(
+                    "{} | pid {} | RSS {} | CPU {:.1}%",
+                    row.title, row.pid, row.rss_bytes, row.cpu_percent
+                );
+                let mut item = div()
+                    .id(("tm-row", i))
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap(px(8.))
+                    .px(px(8.))
+                    .py(px(4.))
+                    .child(label);
+                if let Some(wv) = row.id {
+                    item = item.child(
+                        div()
+                            .id(("tm-end", i))
+                            .cursor_pointer()
+                            .on_click(cx.listener(
+                                move |this: &mut Self, _: &ClickEvent, _w, _cx| {
+                                    this.end_process_for_tab(wv);
+                                },
+                            ))
+                            .child("End process"),
+                    );
+                }
+                items.push(item.into_any_element());
+            }
+            return div()
+                .size_full()
+                .flex()
+                .flex_col()
+                .gap(px(4.))
+                .p(px(8.))
+                .child("Task manager")
+                .children(items)
+                .child(
+                    div()
+                        .id("tm-close")
+                        .cursor_pointer()
+                        .on_click(cx.listener(|this: &mut Self, _: &ClickEvent, _w, _cx| {
+                            this.task_manager_open = false;
+                        }))
+                        .child("Close"),
+                )
+                .into_any_element();
+        }
         if let Some(list) = self.password_picker.clone() {
             let mut items = Vec::new();
             for (i, c) in list.iter().enumerate() {
@@ -1056,150 +1124,200 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
                 )
                 .into_any_element();
         }
+        let hung_bar = if let Some(tab) = self.active_tab().cloned() {
+            if tab.hung {
+                let tab_id = tab.id;
+                let wv = tab.webview;
+                Some(
+                    div()
+                        .w_full()
+                        .px(px(8.))
+                        .py(px(4.))
+                        .flex()
+                        .items_center()
+                        .gap(px(8.))
+                        .child("This page is not responding")
+                        .child(
+                            div()
+                                .id("hung-wait")
+                                .cursor_pointer()
+                                .on_click(cx.listener(
+                                    move |this: &mut Self, _: &ClickEvent, _w, _cx| {
+                                        this.wait_hung_tab(tab_id);
+                                    },
+                                ))
+                                .child("Wait"),
+                        )
+                        .child(
+                            div()
+                                .id("hung-end")
+                                .cursor_pointer()
+                                .on_click(cx.listener(
+                                    move |this: &mut Self, _: &ClickEvent, _w, _cx| {
+                                        this.end_process_for_tab(wv);
+                                    },
+                                ))
+                                .child("End process"),
+                        )
+                        .into_any_element(),
+                )
+            } else {
+                None
+            }
+        } else {
+            None
+        };
         let content_focus = self.content_focus_handle.clone();
-        div()
-            .id("content-area")
-            .track_focus(&content_focus)
-            .size_full()
-            .on_mouse_move(
-                cx.listener(|this: &mut Self, event: &MouseMoveEvent, _window, _cx| {
-                    if let Some(active) = this.active_webview() {
-                        let (x, y) = this.content_point(event.position);
-                        this.engine.input(active, EngineInput::MouseMove { x, y });
-                    }
-                }),
-            )
-            .on_mouse_down(
-                gpui::MouseButton::Left,
-                cx.listener(|this: &mut Self, event: &MouseDownEvent, window, cx| {
-                    window.focus(&this.content_focus_handle, cx);
-                    if let Some(active) = this.active_webview() {
-                        let (x, y) = this.content_point(event.position);
-                        if let Some(button) = Self::map_mouse_button(event.button) {
-                            this.engine
-                                .input(active, EngineInput::MouseDown { button, x, y });
+        let mut root = div().flex().flex_col().size_full();
+        if let Some(bar) = hung_bar {
+            root = root.child(bar);
+        }
+        root.child(
+            div()
+                .id("content-area")
+                .track_focus(&content_focus)
+                .flex_1()
+                .w_full()
+                .on_mouse_move(cx.listener(
+                    |this: &mut Self, event: &MouseMoveEvent, _window, _cx| {
+                        if let Some(active) = this.active_webview() {
+                            let (x, y) = this.content_point(event.position);
+                            this.engine.input(active, EngineInput::MouseMove { x, y });
                         }
-                    }
-                }),
-            )
-            .on_mouse_down(
-                gpui::MouseButton::Right,
-                cx.listener(|this: &mut Self, event: &MouseDownEvent, window, cx| {
-                    window.focus(&this.content_focus_handle, cx);
-                    if let Some(active) = this.active_webview() {
-                        let (x, y) = this.content_point(event.position);
-                        if let Some(button) = Self::map_mouse_button(event.button) {
-                            this.engine
-                                .input(active, EngineInput::MouseDown { button, x, y });
+                    },
+                ))
+                .on_mouse_down(
+                    gpui::MouseButton::Left,
+                    cx.listener(|this: &mut Self, event: &MouseDownEvent, window, cx| {
+                        window.focus(&this.content_focus_handle, cx);
+                        if let Some(active) = this.active_webview() {
+                            let (x, y) = this.content_point(event.position);
+                            if let Some(button) = Self::map_mouse_button(event.button) {
+                                this.engine
+                                    .input(active, EngineInput::MouseDown { button, x, y });
+                            }
                         }
-                    }
-                }),
-            )
-            .on_mouse_down(
-                gpui::MouseButton::Middle,
-                cx.listener(|this: &mut Self, event: &MouseDownEvent, window, cx| {
-                    window.focus(&this.content_focus_handle, cx);
-                    if let Some(active) = this.active_webview() {
-                        let (x, y) = this.content_point(event.position);
-                        if let Some(button) = Self::map_mouse_button(event.button) {
-                            this.engine
-                                .input(active, EngineInput::MouseDown { button, x, y });
+                    }),
+                )
+                .on_mouse_down(
+                    gpui::MouseButton::Right,
+                    cx.listener(|this: &mut Self, event: &MouseDownEvent, window, cx| {
+                        window.focus(&this.content_focus_handle, cx);
+                        if let Some(active) = this.active_webview() {
+                            let (x, y) = this.content_point(event.position);
+                            if let Some(button) = Self::map_mouse_button(event.button) {
+                                this.engine
+                                    .input(active, EngineInput::MouseDown { button, x, y });
+                            }
                         }
-                    }
-                }),
-            )
-            .on_mouse_up(
-                gpui::MouseButton::Left,
-                cx.listener(|this: &mut Self, event: &MouseUpEvent, _window, _cx| {
-                    if let Some(active) = this.active_webview() {
-                        let (x, y) = this.content_point(event.position);
-                        if let Some(button) = Self::map_mouse_button(event.button) {
-                            this.engine
-                                .input(active, EngineInput::MouseUp { button, x, y });
+                    }),
+                )
+                .on_mouse_down(
+                    gpui::MouseButton::Middle,
+                    cx.listener(|this: &mut Self, event: &MouseDownEvent, window, cx| {
+                        window.focus(&this.content_focus_handle, cx);
+                        if let Some(active) = this.active_webview() {
+                            let (x, y) = this.content_point(event.position);
+                            if let Some(button) = Self::map_mouse_button(event.button) {
+                                this.engine
+                                    .input(active, EngineInput::MouseDown { button, x, y });
+                            }
                         }
-                    }
-                }),
-            )
-            .on_mouse_up(
-                gpui::MouseButton::Right,
-                cx.listener(|this: &mut Self, event: &MouseUpEvent, _window, _cx| {
-                    if let Some(active) = this.active_webview() {
-                        let (x, y) = this.content_point(event.position);
-                        if let Some(button) = Self::map_mouse_button(event.button) {
-                            this.engine
-                                .input(active, EngineInput::MouseUp { button, x, y });
+                    }),
+                )
+                .on_mouse_up(
+                    gpui::MouseButton::Left,
+                    cx.listener(|this: &mut Self, event: &MouseUpEvent, _window, _cx| {
+                        if let Some(active) = this.active_webview() {
+                            let (x, y) = this.content_point(event.position);
+                            if let Some(button) = Self::map_mouse_button(event.button) {
+                                this.engine
+                                    .input(active, EngineInput::MouseUp { button, x, y });
+                            }
                         }
-                    }
-                }),
-            )
-            .on_mouse_up(
-                gpui::MouseButton::Middle,
-                cx.listener(|this: &mut Self, event: &MouseUpEvent, _window, _cx| {
-                    if let Some(active) = this.active_webview() {
-                        let (x, y) = this.content_point(event.position);
-                        if let Some(button) = Self::map_mouse_button(event.button) {
-                            this.engine
-                                .input(active, EngineInput::MouseUp { button, x, y });
+                    }),
+                )
+                .on_mouse_up(
+                    gpui::MouseButton::Right,
+                    cx.listener(|this: &mut Self, event: &MouseUpEvent, _window, _cx| {
+                        if let Some(active) = this.active_webview() {
+                            let (x, y) = this.content_point(event.position);
+                            if let Some(button) = Self::map_mouse_button(event.button) {
+                                this.engine
+                                    .input(active, EngineInput::MouseUp { button, x, y });
+                            }
                         }
-                    }
-                }),
-            )
-            .on_scroll_wheel(cx.listener(
-                |this: &mut Self, event: &ScrollWheelEvent, _window, _cx| {
-                    if let Some(active) = this.active_webview() {
-                        let (x, y) = this.content_point(event.position);
-                        let (dx, dy) = match event.delta {
-                            gpui::ScrollDelta::Pixels(p) => (-f32::from(p.x), -f32::from(p.y)),
-                            gpui::ScrollDelta::Lines(l) => (-l.x * 16.0, -l.y * 16.0),
-                        };
-                        this.engine
-                            .input(active, EngineInput::Wheel { dx, dy, x, y });
-                    }
-                },
-            ))
-            .on_key_down(
-                cx.listener(|this: &mut Self, event: &KeyDownEvent, _window, _cx| {
-                    if Self::has_cmd_binding(&event.keystroke.modifiers) {
-                        return;
-                    }
-                    if let Some(active) = this.active_webview()
-                        && let Some((key, code)) = Self::map_key(&event.keystroke)
-                    {
-                        let modifiers = Self::map_modifiers(&event.keystroke.modifiers);
-                        this.engine.input(
-                            active,
-                            EngineInput::Key {
-                                down: true,
-                                key,
-                                code,
-                                modifiers,
-                            },
-                        );
-                    }
-                }),
-            )
-            .on_key_up(
-                cx.listener(|this: &mut Self, event: &KeyUpEvent, _window, _cx| {
-                    if Self::has_cmd_binding(&event.keystroke.modifiers) {
-                        return;
-                    }
-                    if let Some(active) = this.active_webview()
-                        && let Some((key, code)) = Self::map_key(&event.keystroke)
-                    {
-                        let modifiers = Self::map_modifiers(&event.keystroke.modifiers);
-                        this.engine.input(
-                            active,
-                            EngineInput::Key {
-                                down: false,
-                                key,
-                                code,
-                                modifiers,
-                            },
-                        );
-                    }
-                }),
-            )
-            .into_any_element()
+                    }),
+                )
+                .on_mouse_up(
+                    gpui::MouseButton::Middle,
+                    cx.listener(|this: &mut Self, event: &MouseUpEvent, _window, _cx| {
+                        if let Some(active) = this.active_webview() {
+                            let (x, y) = this.content_point(event.position);
+                            if let Some(button) = Self::map_mouse_button(event.button) {
+                                this.engine
+                                    .input(active, EngineInput::MouseUp { button, x, y });
+                            }
+                        }
+                    }),
+                )
+                .on_scroll_wheel(cx.listener(
+                    |this: &mut Self, event: &ScrollWheelEvent, _window, _cx| {
+                        if let Some(active) = this.active_webview() {
+                            let (x, y) = this.content_point(event.position);
+                            let (dx, dy) = match event.delta {
+                                gpui::ScrollDelta::Pixels(p) => (-f32::from(p.x), -f32::from(p.y)),
+                                gpui::ScrollDelta::Lines(l) => (-l.x * 16.0, -l.y * 16.0),
+                            };
+                            this.engine
+                                .input(active, EngineInput::Wheel { dx, dy, x, y });
+                        }
+                    },
+                ))
+                .on_key_down(
+                    cx.listener(|this: &mut Self, event: &KeyDownEvent, _window, _cx| {
+                        if Self::has_cmd_binding(&event.keystroke.modifiers) {
+                            return;
+                        }
+                        if let Some(active) = this.active_webview()
+                            && let Some((key, code)) = Self::map_key(&event.keystroke)
+                        {
+                            let modifiers = Self::map_modifiers(&event.keystroke.modifiers);
+                            this.engine.input(
+                                active,
+                                EngineInput::Key {
+                                    down: true,
+                                    key,
+                                    code,
+                                    modifiers,
+                                },
+                            );
+                        }
+                    }),
+                )
+                .on_key_up(
+                    cx.listener(|this: &mut Self, event: &KeyUpEvent, _window, _cx| {
+                        if Self::has_cmd_binding(&event.keystroke.modifiers) {
+                            return;
+                        }
+                        if let Some(active) = this.active_webview()
+                            && let Some((key, code)) = Self::map_key(&event.keystroke)
+                        {
+                            let modifiers = Self::map_modifiers(&event.keystroke.modifiers);
+                            this.engine.input(
+                                active,
+                                EngineInput::Key {
+                                    down: false,
+                                    key,
+                                    code,
+                                    modifiers,
+                                },
+                            );
+                        }
+                    }),
+                ),
+        )
+        .into_any_element()
     }
 }
 
@@ -1397,6 +1515,11 @@ impl<E: Engine + 'static, S: Store + 'static> Render for BrowserWindow<E, S> {
             .on_action(cx.listener(
                 |this: &mut Self, _: &crate::actions::AlwaysOpenInChrome, _window, _cx| {
                     this.always_open_active_in_chrome();
+                },
+            ))
+            .on_action(cx.listener(
+                |this: &mut Self, _: &crate::task_manager::Toggle, _window, _cx| {
+                    this.toggle_task_manager();
                 },
             ))
     }

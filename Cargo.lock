@@ -2396,6 +2396,7 @@ dependencies = [
  "raw-window-handle",
  "servo",
  "sysinfo 0.40.3",
+ "tabs",
  "url",
 ]
 
