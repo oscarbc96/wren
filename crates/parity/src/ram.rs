@@ -11,6 +11,7 @@ pub struct ProcInfo {
     pub pid: Pid,
     pub parent: Option<Pid>,
     pub rss_bytes: u64,
+    pub phys_footprint_bytes: u64,
 }
 
 pub fn tree_rss(root: Pid, procs: &[ProcInfo]) -> u64 {
@@ -36,13 +37,48 @@ pub fn tree_rss(root: Pid, procs: &[ProcInfo]) -> u64 {
         .sum()
 }
 
+pub fn tree_footprint(root: Pid, procs: &[ProcInfo]) -> u64 {
+    let mut in_tree = std::collections::HashSet::new();
+    in_tree.insert(root);
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for p in procs {
+            if let Some(parent) = p.parent
+                && in_tree.contains(&parent)
+                && !in_tree.contains(&p.pid)
+            {
+                in_tree.insert(p.pid);
+                changed = true;
+            }
+        }
+    }
+    procs
+        .iter()
+        .filter(|p| in_tree.contains(&p.pid))
+        .map(|p| p.phys_footprint_bytes)
+        .sum()
+}
+
+pub fn profile_footprint(root: Pid, procs: &[ProcInfo]) -> u64 {
+    tree_footprint(root, procs)
+}
+
+pub fn footprint(root: Pid, procs: &[ProcInfo]) -> u64 {
+    tree_footprint(root, procs)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RamResult {
     pub browser: String,
     pub workload: String,
     pub version: String,
     pub rss_median_bytes: u64,
+    pub phys_footprint_median_bytes: u64,
+    pub footprint_median_bytes: u64,
     pub samples: Vec<u64>,
+    pub phys_footprint_samples: Vec<u64>,
+    pub footprint_samples: Vec<u64>,
     pub date: String,
 }
 
@@ -66,33 +102,52 @@ pub fn run_ram(browser: &str, workload: &str, out: &Path) -> Result<RamResult> {
         cmd.arg(url);
     }
 
+    // Optional settings override for memory experiments.
+    if let Ok(settings) = std::env::var("WREN_SETTINGS_JSON") {
+        let _ = std::fs::write(tmp.path().join("settings.json"), settings);
+    }
+
     let mut child = cmd.spawn().context("spawn browser")?;
     std::thread::sleep(std::time::Duration::from_secs(30));
 
     let root_pid = sysinfo::Pid::from_u32(child.id());
-    let mut samples = Vec::new();
+    let mut rss_samples = Vec::new();
+    let mut footprint_samples = Vec::new();
     for _ in 0..10 {
-        samples.push(sample_tree_rss(root_pid));
+        let (rss, footprint) = sample_tree(root_pid);
+        rss_samples.push(rss);
+        footprint_samples.push(footprint);
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
 
     let _ = child.kill();
     let _ = child.wait();
 
-    let mut sorted = samples.clone();
-    sorted.sort();
-    let median = if sorted.is_empty() {
+    let mut sorted_rss = rss_samples.clone();
+    sorted_rss.sort();
+    let rss_median = if sorted_rss.is_empty() {
         0
     } else {
-        sorted[sorted.len() / 2]
+        sorted_rss[sorted_rss.len() / 2]
+    };
+    let mut sorted_fp = footprint_samples.clone();
+    sorted_fp.sort();
+    let fp_median = if sorted_fp.is_empty() {
+        0
+    } else {
+        sorted_fp[sorted_fp.len() / 2]
     };
 
     let result = RamResult {
         browser: browser.to_string(),
         workload: workload.to_string(),
         version: browser_version(&bin),
-        rss_median_bytes: median,
-        samples,
+        rss_median_bytes: rss_median,
+        phys_footprint_median_bytes: fp_median,
+        footprint_median_bytes: fp_median,
+        samples: rss_samples.clone(),
+        phys_footprint_samples: footprint_samples.clone(),
+        footprint_samples: footprint_samples.clone(),
         date: today_date(),
     };
 
@@ -103,7 +158,7 @@ pub fn run_ram(browser: &str, workload: &str, out: &Path) -> Result<RamResult> {
     Ok(result)
 }
 
-fn sample_tree_rss(root: Pid) -> u64 {
+fn sample_tree(root: Pid) -> (u64, u64) {
     let mut sys = sysinfo::System::new_all().expect("system");
     sys.refresh_all();
     let procs: Vec<ProcInfo> = sys
@@ -113,9 +168,26 @@ fn sample_tree_rss(root: Pid) -> u64 {
             pid: *pid,
             parent: p.parent(),
             rss_bytes: p.memory(),
+            phys_footprint_bytes: phys_footprint(pid.as_u32()),
         })
         .collect();
-    tree_rss(root, &procs)
+    (tree_rss(root, &procs), tree_footprint(root, &procs))
+}
+
+fn phys_footprint(pid: u32) -> u64 {
+    unsafe {
+        let mut info: libc::rusage_info_v4 = std::mem::zeroed();
+        if libc::proc_pid_rusage(
+            pid as libc::c_int,
+            libc::RUSAGE_INFO_V4,
+            &mut info as *mut _ as *mut libc::rusage_info_t,
+        ) == 0
+        {
+            info.ri_phys_footprint
+        } else {
+            0
+        }
+    }
 }
 
 fn browser_bin(browser: &str) -> Result<PathBuf> {

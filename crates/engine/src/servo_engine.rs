@@ -1,8 +1,8 @@
 //! Servo-backed `Engine` implementation.
 
 use crate::api::{
-    Engine, EngineEvent, EngineInput, LoadState, Modifiers, MouseButton, NavigationFilter,
-    ProcessInfo, RequestFilter, RequestKind, ViewRect, WebViewId,
+    Engine, EngineEvent, EngineInput, EngineOptions, LoadState, MemoryRow, Modifiers, MouseButton,
+    NavigationFilter, ProcessInfo, RequestFilter, RequestKind, ViewRect, WebViewId,
 };
 use anyhow::{Context, Result};
 use dpi::PhysicalSize;
@@ -409,7 +409,7 @@ impl ServoEngine {
         parent: raw_window_handle::WindowHandle<'_>,
         waker: Arc<dyn Fn() + Send + Sync>,
     ) -> Result<Self> {
-        Self::with_devtools(parent, waker, None)
+        Self::with_options(parent, waker, EngineOptions::default())
     }
 
     /// Like `new`, with Servo's remote debugging server listening on
@@ -420,6 +420,21 @@ impl ServoEngine {
         waker: Arc<dyn Fn() + Send + Sync>,
         devtools_port: Option<u16>,
     ) -> Result<Self> {
+        let opts = EngineOptions {
+            devtools_port,
+            ..EngineOptions::default()
+        };
+        Self::with_options(parent, waker, opts)
+    }
+
+    /// Creates a `ServoEngine` with the given options (devtools port, JS GC
+    /// profile, JIT toggle).
+    pub fn with_options(
+        parent: raw_window_handle::WindowHandle<'_>,
+        waker: Arc<dyn Fn() + Send + Sync>,
+        options: EngineOptions,
+    ) -> Result<Self> {
+        let devtools_port = options.devtools_port;
         let parent_ptr = match parent.as_raw() {
             RawWindowHandle::AppKit(h) => h.ns_view.as_ptr(),
             other => anyhow::bail!("unsupported parent window handle: {other:?}"),
@@ -471,6 +486,19 @@ impl ServoEngine {
         if let Some(port) = devtools_port {
             prefs.devtools_server_enabled = true;
             prefs.devtools_server_listen_address = format!("127.0.0.1:{port}");
+        }
+        if options.js_gc_profile == "low" {
+            prefs.js_mem_gc_compacting_enabled = true;
+            prefs.js_mem_gc_empty_chunk_count_min = 0;
+            prefs.js_mem_gc_high_frequency_high_limit_mb = 200;
+            prefs.js_mem_gc_high_frequency_low_limit_mb = 50;
+            prefs.js_mem_gc_high_frequency_heap_growth_max = 200;
+            prefs.js_mem_gc_high_frequency_heap_growth_min = 120;
+            prefs.js_mem_gc_low_frequency_heap_growth = 120;
+        }
+        if !options.js_jit {
+            prefs.js_ion_enabled = false;
+            prefs.js_baseline_jit_enabled = false;
         }
         let servo = ServoBuilder::default()
             .opts(opts)
@@ -910,6 +938,52 @@ impl Engine for ServoEngine {
         } else {
             anyhow::bail!("Servo starts or stops DevTools only at launch")
         }
+    }
+
+    fn memory_report(&mut self) -> Vec<MemoryRow> {
+        use servo::profile_traits::mem::MemoryReportResult;
+        use servo_base::generic_channel::GenericCallback;
+        let report: std::sync::Arc<std::sync::Mutex<Option<MemoryReportResult>>> =
+            std::sync::Arc::default();
+        let cb_report = report.clone();
+        let callback = match GenericCallback::new(move |result| {
+            if let Ok(r) = result {
+                *cb_report.lock().expect("memory report lock") = Some(r);
+            }
+        }) {
+            Ok(c) => c,
+            Err(_) => return Vec::new(),
+        };
+        self.servo().create_memory_report(callback);
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while report.lock().expect("memory report lock").is_none()
+            && std::time::Instant::now() < deadline
+        {
+            self.spin();
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        let result = report.lock().expect("memory report lock").take();
+        let mut rows = Vec::new();
+        if let Some(r) = result {
+            for proc in r.results {
+                let process = if proc.pid == std::process::id() {
+                    None
+                } else {
+                    self.pids
+                        .iter()
+                        .find_map(|(pid, id)| if *pid == proc.pid { Some(*id) } else { None })
+                };
+                for rep in proc.reports {
+                    rows.push(MemoryRow {
+                        process,
+                        path: rep.path.join("/"),
+                        bytes: rep.size as u64,
+                    });
+                }
+            }
+        }
+        rows
     }
 
     fn drain_events(&mut self) -> Vec<EngineEvent> {

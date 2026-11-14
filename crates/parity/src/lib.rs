@@ -2,6 +2,8 @@ pub mod ram;
 pub mod workloads;
 pub mod wpt;
 
-pub use ram::{Pid, ProcInfo, RamResult, run_ram, tree_rss};
+pub use ram::{
+    Pid, ProcInfo, RamResult, footprint, profile_footprint, run_ram, tree_footprint, tree_rss,
+};
 pub use workloads::*;
 pub use wpt::*;

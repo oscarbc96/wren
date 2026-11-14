@@ -38,6 +38,11 @@ pub fn run_with_args(args: Args) {
         Some(port) => Some(port),
         None => settings.devtools.enabled.then_some(settings.devtools.port),
     };
+    let engine_options = engine::EngineOptions {
+        devtools_port,
+        js_gc_profile: settings.memory.js_gc_profile.clone(),
+        js_jit: settings.memory.js_jit,
+    };
     let settings_file = paths.settings.clone();
 
     let adblock_dir = data_dir.join("adblock");
@@ -81,6 +86,7 @@ pub fn run_with_args(args: Args) {
 
     let screenshot_out = args.screenshot.clone().map(PathBuf::from);
     let screenshot_delay_ms = args.screenshot_delay_ms;
+    let memory_report_out = args.memory_report.clone().map(PathBuf::from);
     let screenshot_has_urls = !urls.is_empty();
     let screenshot_view_ptr: Arc<std::sync::Mutex<Option<usize>>> =
         Arc::new(std::sync::Mutex::new(None));
@@ -114,7 +120,7 @@ pub fn run_with_args(args: Args) {
                     }
                     let waker: Arc<dyn Fn() + Send + Sync> = Arc::new(|| {});
                     let mut engine =
-                        engine::ServoEngine::with_devtools(raw_wh, waker, devtools_port)
+                        engine::ServoEngine::with_options(raw_wh, waker, engine_options.clone())
                             .expect("servo engine");
                     engine.set_hang_timeout(settings_for_win.hang.timeout_seconds);
                     if let Some(b) = &blocker {
@@ -158,6 +164,7 @@ pub fn run_with_args(args: Args) {
 
         let screenshot_out_for_task = screenshot_out.clone();
         let screenshot_view_ptr_for_task = screenshot_view_ptr.clone();
+        let memory_report_out_for_task = memory_report_out.clone();
         cx.spawn(async move |cx| {
             let mut seen_loading = false;
             let start = std::time::Instant::now();
@@ -172,6 +179,18 @@ pub fn run_with_args(args: Args) {
                     .is_ok();
                 if !ok {
                     break;
+                }
+                if let Some(out) = memory_report_out_for_task.clone() {
+                    let elapsed = start.elapsed();
+                    if elapsed >= Duration::from_secs(40) {
+                        let rows = handle
+                            .update(cx, |view, _window, _cx| view.engine.memory_report())
+                            .unwrap_or_default();
+                        if let Ok(text) = serde_json::to_string_pretty(&rows) {
+                            let _ = std::fs::write(&out, text);
+                        }
+                        std::process::exit(0);
+                    }
                 }
                 if let Some(out) = screenshot_out_for_task.clone() {
                     let loading = handle

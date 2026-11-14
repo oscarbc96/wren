@@ -165,6 +165,24 @@ impl Default for DevtoolsSettings {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct MemorySettings {
+    pub js_jit: bool,
+    pub js_gc_profile: String,
+    pub pressure_response: bool,
+}
+
+impl Default for MemorySettings {
+    fn default() -> Self {
+        Self {
+            js_jit: true,
+            js_gc_profile: "default".to_string(),
+            pressure_response: true,
+        }
+    }
+}
+
 /// All user-visible settings.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
@@ -177,4 +195,5 @@ pub struct Settings {
     pub downloads: DownloadsSettings,
     pub hang: HangSettings,
     pub devtools: DevtoolsSettings,
+    pub memory: MemorySettings,
 }
