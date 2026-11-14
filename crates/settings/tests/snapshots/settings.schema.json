@@ -37,6 +37,12 @@
         "enabled": true
       }
     },
+    "downloads": {
+      "$ref": "#/$defs/DownloadsSettings",
+      "default": {
+        "dir": "/Users/oscarblancocastan/Downloads"
+      }
+    },
     "hang": {
       "$ref": "#/$defs/HangSettings",
       "default": {
@@ -46,7 +52,8 @@
     "devtools": {
       "$ref": "#/$defs/DevtoolsSettings",
       "default": {
-        "port": 7000
+        "enabled": false,
+        "port": 6000
       }
     }
   },
@@ -117,6 +124,15 @@
         }
       }
     },
+    "DownloadsSettings": {
+      "type": "object",
+      "properties": {
+        "dir": {
+          "type": "string",
+          "default": "/Users/oscarblancocastan/Downloads"
+        }
+      }
+    },
     "HangSettings": {
       "type": "object",
       "properties": {
@@ -131,12 +147,18 @@
     "DevtoolsSettings": {
       "type": "object",
       "properties": {
+        "enabled": {
+          "description": "Start Servo's remote debugging server (Firefox DevTools) at launch.",
+          "type": "boolean",
+          "default": false
+        },
         "port": {
+          "description": "Port on 127.0.0.1.",
           "type": "integer",
           "format": "uint16",
           "minimum": 0,
           "maximum": 65535,
-          "default": 7000
+          "default": 6000
         }
       }
     }

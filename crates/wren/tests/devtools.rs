@@ -38,8 +38,8 @@ fn devtools_toggle_shows_indicator(cx: &mut TestAppContext) {
                 w.engine
                     .calls()
                     .iter()
-                    .any(|c| matches!(c, FakeCall::SetDevtools { port: Some(7000) })),
-                "expected set_devtools(Some(7000)), got {:?}",
+                    .any(|c| matches!(c, FakeCall::SetDevtools { port: Some(6000) })),
+                "expected set_devtools(Some(6000)), got {:?}",
                 w.engine.calls()
             );
             assert!(
@@ -47,7 +47,7 @@ fn devtools_toggle_shows_indicator(cx: &mut TestAppContext) {
                     .devtools_indicator
                     .as_deref()
                     .unwrap_or("")
-                    .contains("7000"),
+                    .contains("6000"),
                 "expected toolbar devtools indicator, got {:?}",
                 w.toolbar.devtools_indicator
             );

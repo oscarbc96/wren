@@ -3,26 +3,27 @@ title: Herramientas de desarrollo
 description: Inspecciona páginas con el servidor de depuración remota de Servo y las herramientas de Firefox.
 ---
 
-Wren puede exponer el servidor de depuración remota de Servo para que puedas
-inspeccionar páginas con las herramientas de desarrollo de Firefox.
+Wren puede exponer el servidor de depuración remota de Servo para que
+inspecciones páginas con las DevTools de Firefox. El servidor solo escucha
+en `127.0.0.1`.
 
-## Activar herramientas de desarrollo
+## Activarlo
 
-- Alternar: `Cmd+Alt+I`
-- Ajuste: `devtools.port` (predeterminado: `7000`)
-- Dirección de escucha: siempre `127.0.0.1:<port>` (solo bucle local)
+- Para una sesión: abre Wren con `--devtools` (puerto de la configuración)
+  o `--devtools 6123`.
+- Siempre: pon `"devtools": { "enabled": true }` en `settings.json`, o
+  pulsa `Cmd+Alt+I`, que guarda ese ajuste por ti.
+- Puerto: `devtools.port`, por defecto `6000`.
 
-En Servo 0.8, el servidor de herramientas de desarrollo se inicia solo cuando
-el motor se inicializa. Cambiar la preferencia en tiempo de ejecución no inicia
-ni detiene el servidor en la sesión actual, por lo que Wren aplica el ajuste en
-el próximo inicio. El indicador de la barra de herramientas te avisa cuando se
-aplicará en el próximo inicio.
+Servo 0.8 solo arranca su servidor de depuración al iniciar el motor, así
+que `Cmd+Alt+I` se aplica en el siguiente arranque. La barra de
+herramientas muestra "DevTools on :6000" mientras el servidor funciona e
+indica cuándo un cambio espera a un reinicio.
 
 ## Conectar desde Firefox
 
-1. Activa las herramientas de desarrollo en Wren (`Cmd+Alt+I`).
-2. Reinicia Wren si el indicador muestra que el ajuste se aplicará en el
-   próximo inicio.
-3. Abre `about:debugging` en Firefox.
-4. Añade una ubicación de red para `localhost:7000` (o el puerto configurado).
-5. Conéctate e inspecciona la página.
+1. Abre Wren con DevTools activado.
+2. En Firefox, abre `about:debugging` y luego Setup.
+3. Añade la ubicación de red `127.0.0.1:6000` (usa la IP: en macOS
+   `localhost` puede llegar al receptor de AirPlay).
+4. Conecta y elige la pestaña que quieres inspeccionar.

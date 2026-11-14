@@ -1,21 +1,21 @@
 use std::sync::Arc;
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use crate::open_in_chrome::{self, Opener, SystemOpener};
 
-use engine::{
-    Engine, EngineEvent, EngineInput, LoadState, Modifiers, MouseButton, ViewRect, WebViewId,
-};
+use engine::{Engine, EngineEvent, EngineInput, LoadState, Modifiers, MouseButton, WebViewId};
 use gpui::{
     App, ClickEvent, Context, FocusHandle, Focusable, KeyDownEvent, KeyUpEvent,
     MouseButton as GpuiMouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point,
     Render, ScrollWheelEvent, Window, div, prelude::*, px,
 };
 use settings::Settings;
-use store::Store;
+use store::{DownloadRow, Store};
 use tabs::{TabId, TabState, TabStrip};
 use url::Url;
 
+use crate::downloads::{DownloadHandle, DownloadMsg};
 use crate::toolbar::ToolbarState;
 use themes::ActiveTheme;
 
@@ -37,13 +37,25 @@ pub struct BrowserWindow<E: Engine + 'static, S: Store + 'static> {
     pub password_status: Option<String>,
     pub site_notice: Option<String>,
     pub tab_menu: Option<TabId>,
+    pub downloads: Vec<DownloadRow>,
+    pub downloads_panel_open: bool,
+    pub active_downloads: usize,
+    pub download_progress: Option<(u64, Option<u64>)>,
     pub task_manager_open: bool,
+    /// DevTools wanted at the next launch (`devtools.enabled`).
     pub devtools_enabled: bool,
+    /// Port of the DevTools server running now, if Servo started one.
+    pub devtools_running: Option<u16>,
+    /// User settings file the DevTools toggle writes to; `None` in tests.
+    settings_file: Option<std::path::PathBuf>,
     content_origin: Point<Pixels>,
     last_save: Option<Instant>,
     dirty_since: Option<Instant>,
     last_sleep_check: Option<Instant>,
     shutting_down: bool,
+    download_rx: Option<mpsc::Receiver<DownloadMsg>>,
+    download_tx: Option<mpsc::Sender<DownloadMsg>>,
+    download_handles: std::collections::HashMap<i64, DownloadHandle>,
 }
 
 impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
@@ -187,8 +199,14 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
             password_status: None,
             site_notice: None,
             tab_menu: None,
+            downloads: Vec::new(),
+            downloads_panel_open: false,
+            active_downloads: 0,
+            download_progress: None,
             task_manager_open: false,
             devtools_enabled: false,
+            devtools_running: None,
+            settings_file: None,
             content_origin: Point {
                 x: px(0.),
                 y: px(0.),
@@ -197,6 +215,9 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
             dirty_since: None,
             last_sleep_check: Some(Instant::now()),
             shutting_down: false,
+            download_rx: None,
+            download_tx: None,
+            download_handles: std::collections::HashMap::new(),
         }
     }
 
@@ -297,24 +318,53 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
         }
     }
 
-    pub fn toggle_task_manager(&mut self) {
-        self.task_manager_open = !self.task_manager_open;
+    /// Records the DevTools server started with the engine and where the
+    /// toggle persists its choice.
+    pub fn set_devtools_state(
+        &mut self,
+        running: Option<u16>,
+        settings_file: Option<std::path::PathBuf>,
+    ) {
+        self.devtools_running = running;
+        self.devtools_enabled = running.is_some();
+        self.settings_file = settings_file;
+        self.update_devtools_indicator();
     }
 
+    /// Flips `devtools.enabled`. Servo starts its DevTools server only at
+    /// launch, so the change applies on the next start; the toolbar says so.
     pub fn toggle_devtools(&mut self) {
         self.devtools_enabled = !self.devtools_enabled;
         let port = self.settings.devtools.port;
-        let requested = if self.devtools_enabled {
-            Some(port)
-        } else {
-            None
-        };
+        self.settings.devtools.enabled = self.devtools_enabled;
+        let requested = self.devtools_enabled.then_some(port);
         let _ = self.engine.set_devtools(requested);
-        self.toolbar.devtools_indicator = if self.devtools_enabled {
-            Some(format!("DevTools on :{port} (applies on next launch)"))
-        } else {
-            None
+        if let Some(path) = &self.settings_file {
+            let text = std::fs::read_to_string(path).unwrap_or_default();
+            let value = if self.devtools_enabled {
+                "true"
+            } else {
+                "false"
+            };
+            if let Some(updated) = settings::update_value(&text, &["devtools", "enabled"], value) {
+                let _ = std::fs::write(path, updated);
+            }
+        }
+        self.update_devtools_indicator();
+    }
+
+    fn update_devtools_indicator(&mut self) {
+        let port = self.settings.devtools.port;
+        self.toolbar.devtools_indicator = match (self.devtools_running, self.devtools_enabled) {
+            (Some(p), true) => Some(format!("DevTools on :{p}")),
+            (Some(p), false) => Some(format!("DevTools on :{p} (off after restart)")),
+            (None, true) => Some(format!("DevTools on :{port} after restart")),
+            (None, false) => None,
         };
+    }
+
+    pub fn toggle_task_manager(&mut self) {
+        self.task_manager_open = !self.task_manager_open;
     }
 
     pub fn end_process_for_tab(&mut self, webview: WebViewId) {
@@ -331,22 +381,16 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
         self.strip.reload_crashed(&mut self.engine, id);
     }
 
-    pub fn tick(&mut self, window: &mut Window, _cx: &mut Context<Self>) {
+    pub fn tick(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let bounds = window.bounds();
         let w = f32::from(bounds.size.width).max(1.0);
         let h = f32::from(bounds.size.height).max(1.0);
         let chrome_h = self.toolbar.chrome_height();
-        let content_h = (h - chrome_h).max(1.0);
         self.content_origin = Point {
             x: bounds.origin.x,
             y: bounds.origin.y + px(chrome_h),
         };
-        let rect = ViewRect {
-            x: 0.0,
-            y: chrome_h,
-            width: w,
-            height: content_h,
-        };
+        let rect = crate::layout::content_rect((w, h), 0.0, chrome_h);
         if let Some(active) = self.active_tab().cloned() {
             if active.crashed.is_none() {
                 self.engine.show(active.webview, rect);
@@ -362,9 +406,19 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
 
         self.engine.spin();
         let events = self.engine.drain_events();
+        if std::env::var_os("WREN_DEBUG_EVENTS").is_some() {
+            for e in &events {
+                eprintln!("WREN_EVENT {e:?}");
+            }
+        }
+        // Engine events change titles, URLs and load state: redraw the chrome.
+        if !events.is_empty() {
+            cx.notify();
+        }
         for ev in events {
             self.handle_event(&ev);
         }
+        self.poll_downloads();
 
         if self.strip.changed() {
             self.dirty_since = Some(Instant::now());
@@ -465,6 +519,14 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
         if let EngineEvent::NavigationDenied { url, .. } = ev {
             self.open_external(url.clone());
         }
+        if let EngineEvent::Download {
+            id: _,
+            url,
+            suggested_name,
+        } = ev
+        {
+            self.start_download(url.clone(), suggested_name.clone());
+        }
         self.strip.apply(&mut self.engine, ev);
         if let Some(tab) = self.active_tab().cloned() {
             self.toolbar.url_text = tab.url.to_string();
@@ -535,6 +597,107 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
         self.shutting_down = true;
         self.save_session_now();
         self.engine.shutdown();
+    }
+
+    pub fn start_download(&mut self, url: Url, suggested_name: Option<String>) {
+        let dir = std::path::PathBuf::from(&self.settings.downloads.dir);
+        let name = crate::downloads::suggested_name_from_url(&url, suggested_name.as_deref());
+        let path = crate::downloads::choose_path(&dir, &name);
+        let path_str = path.to_string_lossy().into_owned();
+        let Ok(id) = self.store.record_download(
+            url.as_str(),
+            &path_str,
+            0,
+            None,
+            store::DownloadState::InProgress,
+        ) else {
+            self.site_notice = Some(format!("Could not start download: {name}"));
+            return;
+        };
+        if self.download_rx.is_none() {
+            let (tx, rx) = mpsc::channel();
+            self.download_tx = Some(tx);
+            self.download_rx = Some(rx);
+        }
+        let Some(tx) = self.download_tx.clone() else {
+            return;
+        };
+        let handle = crate::downloads::start_download(id, url, path, tx);
+        self.download_handles.insert(handle.id, handle);
+        self.refresh_downloads();
+    }
+
+    pub fn refresh_downloads(&mut self) {
+        if let Ok(list) = self.store.list_downloads() {
+            self.downloads = list;
+        }
+        self.recount_downloads();
+    }
+
+    fn recount_downloads(&mut self) {
+        self.active_downloads = self
+            .downloads
+            .iter()
+            .filter(|d| d.state == store::DownloadState::InProgress)
+            .count();
+        self.download_progress = self
+            .downloads
+            .iter()
+            .rev()
+            .find(|d| d.state == store::DownloadState::InProgress)
+            .map(|d| (d.bytes, d.total));
+    }
+
+    pub fn poll_downloads(&mut self) {
+        let Some(rx) = &self.download_rx else {
+            return;
+        };
+        let msgs: Vec<DownloadMsg> = rx.try_iter().collect();
+        if msgs.is_empty() {
+            return;
+        }
+        let mut finished = false;
+        for msg in msgs {
+            let (id, bytes, total, state) = match msg {
+                DownloadMsg::Started { .. } => continue,
+                DownloadMsg::Progress { id, bytes, total } => {
+                    // Progress stays in memory; the store gets the final state.
+                    if let Some(row) = self.downloads.iter_mut().find(|d| d.id == id) {
+                        row.bytes = bytes;
+                        row.total = total;
+                    }
+                    continue;
+                }
+                DownloadMsg::Finished { id, bytes, total } => {
+                    (id, bytes, total, store::DownloadState::Completed)
+                }
+                DownloadMsg::Cancelled { id, bytes, total } => {
+                    (id, bytes, total, store::DownloadState::Cancelled)
+                }
+                DownloadMsg::Failed {
+                    id, bytes, total, ..
+                } => (id, bytes, total, store::DownloadState::Failed),
+            };
+            let _ = self.store.update_download(id, bytes, total, state);
+            self.download_handles.remove(&id);
+            finished = true;
+        }
+        if finished {
+            self.refresh_downloads();
+        } else {
+            self.recount_downloads();
+        }
+    }
+
+    pub fn cancel_download(&mut self, id: i64) {
+        if let Some(h) = self.download_handles.get(&id) {
+            h.cancel.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+
+    pub fn toggle_downloads_panel(&mut self) {
+        self.downloads_panel_open = !self.downloads_panel_open;
+        self.refresh_downloads();
     }
 
     pub fn focus_omnibox_window(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -654,11 +817,15 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
     }
 
     fn render_chrome(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.global::<ActiveTheme>().clone();
+        let chrome_h = self.toolbar.chrome_height();
         let mut col = div()
+            .relative()
             .flex()
             .flex_col()
             .w_full()
-            .h(px(self.toolbar.chrome_height()))
+            .h(px(chrome_h))
+            .bg(theme.background)
             .child(self.render_tab_strip(cx));
         if let Some(menu_id) = self.tab_menu {
             let pinned = self
@@ -670,11 +837,19 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
                 .unwrap_or(false);
             col = col.child(
                 div()
+                    .absolute()
+                    .top(px(34.0))
+                    .left(px(80.0))
                     .flex()
                     .items_center()
-                    .gap(px(8.))
-                    .px(px(8.))
-                    .h(px(24.))
+                    .gap(px(8.0))
+                    .px(px(8.0))
+                    .py(px(4.0))
+                    .rounded_md()
+                    .bg(theme.surface)
+                    .border_1()
+                    .border_color(theme.border)
+                    .shadow_lg()
                     .child(
                         div()
                             .id("tab-menu-pin")
@@ -718,6 +893,7 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
     }
 
     fn render_tab_strip(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.global::<ActiveTheme>().clone();
         let tabs = self.strip.tabs().to_vec();
         let active_id = self.strip.active();
         let mut children: Vec<gpui::AnyElement> = Vec::new();
@@ -732,18 +908,29 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
             } else {
                 truncate_text(&tab.title, 24)
             };
+            let host_letter = tab
+                .url
+                .host_str()
+                .and_then(|h| h.chars().next())
+                .map(|c| c.to_ascii_uppercase().to_string())
+                .unwrap_or_else(|| "?".to_string());
             let is_slept = tab.state == TabState::Slept;
             children.push(
                 div()
                     .id(("tab", i))
-                    .h(px(24.))
+                    .group("tab")
+                    .h(px(30.0))
+                    .min_w(px(120.0))
+                    .max_w(px(220.0))
                     .flex()
                     .items_center()
-                    .gap(px(6.))
-                    .px(px(8.))
-                    .rounded_lg()
+                    .gap(px(6.0))
+                    .px(px(8.0))
+                    .rounded_md()
                     .cursor_pointer()
-                    .when(selected, |style| style.bg(gpui::white()))
+                    .when(selected, |style| style.bg(theme.surface))
+                    .when(!selected, |style| style.bg(gpui::transparent_black()))
+                    .hover(|style| style.bg(theme.surface))
                     .when(is_slept, |style| style.opacity(0.5))
                     .on_click(
                         cx.listener(move |this: &mut Self, _: &ClickEvent, _window, _cx| {
@@ -767,17 +954,44 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
                             this.tab_menu = Some(id);
                         }),
                     )
-                    .child(label)
+                    .child(
+                        div()
+                            .w(px(16.0))
+                            .h(px(16.0))
+                            .rounded_sm()
+                            .bg(theme.accent)
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .text_size(px(10.0))
+                            .text_color(theme.accent_text)
+                            .child(host_letter),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .text_size(px(13.0))
+                            .text_color(theme.text)
+                            .child(label),
+                    )
                     .child(
                         div()
                             .id(("tab-close", i))
+                            .w(px(16.0))
+                            .h(px(16.0))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded_sm()
                             .cursor_pointer()
+                            .opacity(if selected { 1.0 } else { 0.0 })
+                            .group_hover("tab", |style| style.opacity(1.0))
                             .on_click(cx.listener(
                                 move |this: &mut Self, _: &ClickEvent, _window, _cx| {
                                     this.close_tab(id);
                                 },
                             ))
-                            .child("x"),
+                            .child("×"),
                     )
                     .into_any_element(),
             );
@@ -785,20 +999,25 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
         div()
             .flex()
             .items_center()
-            .h(px(32.))
+            .h(px(38.0))
             .w_full()
-            .gap(px(4.))
+            .pl(px(86.0))
+            .gap(px(6.0))
+            .bg(theme.background)
             .children(children)
             .child(
                 div()
                     .id("new-tab")
-                    .h(px(24.))
-                    .w(px(28.))
+                    .h(px(28.0))
+                    .w(px(28.0))
                     .flex()
                     .items_center()
                     .justify_center()
-                    .rounded_lg()
+                    .rounded_md()
                     .cursor_pointer()
+                    .text_size(px(16.0))
+                    .text_color(theme.muted_text)
+                    .hover(|style| style.bg(theme.surface))
                     .on_click(
                         cx.listener(|this: &mut Self, _: &ClickEvent, _window, _cx| {
                             this.new_tab(false);
@@ -809,7 +1028,7 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
     }
 
     fn render_toolbar(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.global::<ActiveTheme>();
+        let theme = cx.global::<ActiveTheme>().clone();
         let can_back = self.toolbar.can_back;
         let can_forward = self.toolbar.can_forward;
         let loading = self.toolbar.loading;
@@ -821,7 +1040,6 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
         } else {
             self.omnibox_text.clone()
         };
-        let title = self.toolbar.title.clone();
         let mut suggestions = Vec::new();
         if self.omnibox_focused && !self.suggestions.is_empty() {
             for (i, s) in self.suggestions.iter().enumerate() {
@@ -829,8 +1047,8 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
                 suggestions.push(
                     div()
                         .id(("suggest", i))
-                        .px(px(8.))
-                        .py(px(4.))
+                        .px(px(8.0))
+                        .py(px(4.0))
                         .cursor_pointer()
                         .on_click(cx.listener(
                             move |this: &mut Self, _: &ClickEvent, _window, _cx| {
@@ -844,55 +1062,101 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
             }
         }
 
+        let icon_button = |id: &'static str, label: &'static str, enabled: bool| {
+            div()
+                .id(id)
+                .w(px(28.0))
+                .h(px(28.0))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded_md()
+                .cursor_pointer()
+                .opacity(if enabled { 1.0 } else { 0.4 })
+                .child(label)
+        };
+
         div()
             .flex()
             .flex_col()
             .w_full()
+            .bg(theme.background)
             .child(
                 div()
-                    .h(px(40.))
+                    .h(px(40.0))
                     .w_full()
                     .flex()
                     .items_center()
-                    .gap(px(8.))
-                    .px(px(8.))
+                    .gap(px(8.0))
+                    .px(px(8.0))
                     .child(
-                        div()
-                            .id("back")
-                            .cursor_pointer()
-                            .when(can_back, |s| s.opacity(1.0))
-                            .when(!can_back, |s| s.opacity(0.4))
-                            .on_click(cx.listener(
-                                |this: &mut Self, _: &ClickEvent, _window, _cx| {
-                                    this.back_active();
-                                },
-                            ))
-                            .child("<"),
+                        icon_button("back", "\u{2190}", can_back).on_click(cx.listener(
+                            |this: &mut Self, _: &ClickEvent, _window, _cx| {
+                                this.back_active();
+                            },
+                        )),
                     )
                     .child(
-                        div()
-                            .id("forward")
-                            .cursor_pointer()
-                            .when(can_forward, |s| s.opacity(1.0))
-                            .when(!can_forward, |s| s.opacity(0.4))
-                            .on_click(cx.listener(
-                                |this: &mut Self, _: &ClickEvent, _window, _cx| {
-                                    this.forward_active();
-                                },
-                            ))
-                            .child(">"),
+                        icon_button("forward", "\u{2192}", can_forward).on_click(cx.listener(
+                            |this: &mut Self, _: &ClickEvent, _window, _cx| {
+                                this.forward_active();
+                            },
+                        )),
                     )
                     .child(
                         div()
                             .id("reload")
+                            .w(px(28.0))
+                            .h(px(28.0))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded_md()
                             .cursor_pointer()
                             .on_click(cx.listener(
                                 |this: &mut Self, _: &ClickEvent, _window, _cx| {
                                     this.reload_active();
                                 },
                             ))
-                            .child(if loading { "Stop" } else { "Reload" }),
+                            .child(if loading { "\u{25A0}" } else { "\u{21BB}" }),
                     )
+                    .child(
+                        div()
+                            .id("url-display")
+                            .flex_1()
+                            .h(px(30.0))
+                            .px(px(12.0))
+                            .flex()
+                            .items_center()
+                            .rounded_md()
+                            .border_1()
+                            .border_color(theme.border)
+                            .bg(theme.surface)
+                            .cursor_text()
+                            .on_click(cx.listener(|this: &mut Self, _: &ClickEvent, window, cx| {
+                                this.focus_omnibox_window(window, cx);
+                            }))
+                            .child(if url_display.is_empty() {
+                                "Search or enter address".to_string()
+                            } else {
+                                url_display
+                            }),
+                    )
+                    .when_some(self.toolbar.devtools_indicator.clone(), |d, indicator| {
+                        d.child(
+                            div()
+                                .id("devtools-indicator")
+                                .px(px(8.))
+                                .h(px(24.))
+                                .flex()
+                                .items_center()
+                                .rounded_md()
+                                .bg(theme.surface)
+                                .text_size(px(12.))
+                                .text_color(theme.text)
+                                .child(indicator),
+                        )
+                    })
                     .child(
                         div()
                             .id("star")
@@ -902,69 +1166,131 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
                                     this.toggle_bookmark();
                                 },
                             ))
-                            .child(if bookmarked { "*" } else { "☆" }),
+                            .child(if bookmarked { "*" } else { "\u{2606}" }),
                     )
-                    .child(
+                    .child({
+                        let label = if self.active_downloads > 0 {
+                            match self.download_progress {
+                                Some((b, Some(t))) if t > 0 => {
+                                    format!("{}%", (b.saturating_mul(100) / t).min(100))
+                                }
+                                _ => format!("{}", self.active_downloads),
+                            }
+                        } else {
+                            String::new()
+                        };
                         div()
-                            .id("open-in-chrome")
+                            .id("downloads-button")
+                            .flex()
+                            .items_center()
+                            .gap(px(4.))
+                            .px(px(6.))
+                            .h(px(28.))
+                            .rounded_md()
                             .cursor_pointer()
+                            .text_color(theme.text)
+                            .hover(|s| s.bg(theme.surface))
                             .on_click(cx.listener(
                                 |this: &mut Self, _: &ClickEvent, _window, _cx| {
-                                    this.open_active_in_chrome();
+                                    this.toggle_downloads_panel();
                                 },
                             ))
-                            .child("Chrome"),
-                    )
-                    .child(
+                            .child("\u{2193}")
+                            .when(!label.is_empty(), |d| d.child(label))
+                    }),
+            )
+            .when(self.downloads_panel_open, |d| {
+                let mut rows = Vec::new();
+                for (i, dl) in self.downloads.iter().rev().take(20).enumerate() {
+                    let path = dl.path.clone();
+                    let path_open = dl.path.clone();
+                    let path_show = dl.path.clone();
+                    let id = dl.id;
+                    let state = format!("{:?}", dl.state);
+                    let progress = match dl.total {
+                        Some(t) if t > 0 => format!("{} / {} ({})", dl.bytes, t, state),
+                        _ => format!("{} ({})", dl.bytes, state),
+                    };
+                    let name = std::path::Path::new(&path)
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or(&path)
+                        .to_string();
+                    rows.push(
                         div()
-                            .id("always-open-in-chrome")
-                            .cursor_pointer()
-                            .on_click(cx.listener(
-                                |this: &mut Self, _: &ClickEvent, _window, _cx| {
-                                    this.always_open_active_in_chrome();
-                                },
-                            ))
-                            .child("Always open this site in Chrome"),
-                    )
-                    .child(
-                        div()
-                            .id("url-display")
-                            .flex_1()
+                            .id(("dl-row", i))
+                            .flex()
+                            .items_center()
+                            .gap(px(8.))
                             .px(px(8.))
                             .py(px(4.))
-                            .rounded_md()
-                            .bg(gpui::white())
-                            .cursor_text()
-                            .on_click(cx.listener(|this: &mut Self, _: &ClickEvent, window, cx| {
-                                this.focus_omnibox_window(window, cx);
-                            }))
-                            .child(url_display),
-                    )
-                    .when_some(self.toolbar.devtools_indicator.clone(), |d, indicator| {
-                        d.child(
-                            div()
-                                .id("devtools-indicator")
-                                .text_sm()
-                                .text_color(theme.text)
-                                .child(indicator),
-                        )
-                    })
-                    .child(
+                            .child(div().flex_1().child(format!("{name} - {progress}")))
+                            .child(
+                                div()
+                                    .id(("dl-open", i))
+                                    .cursor_pointer()
+                                    .on_click(cx.listener(
+                                        move |_this: &mut Self, _: &ClickEvent, _w, _cx| {
+                                            let _ = std::process::Command::new("open")
+                                                .arg(&path_open)
+                                                .spawn();
+                                        },
+                                    ))
+                                    .child("Open"),
+                            )
+                            .child(
+                                div()
+                                    .id(("dl-show", i))
+                                    .cursor_pointer()
+                                    .on_click(cx.listener(
+                                        move |_this: &mut Self, _: &ClickEvent, _w, _cx| {
+                                            let _ = std::process::Command::new("open")
+                                                .args(["-R", &path_show])
+                                                .spawn();
+                                        },
+                                    ))
+                                    .child("Show in Finder"),
+                            )
+                            .child(
+                                div()
+                                    .id(("dl-cancel", i))
+                                    .cursor_pointer()
+                                    .on_click(cx.listener(
+                                        move |this: &mut Self, _: &ClickEvent, _w, _cx| {
+                                            this.cancel_download(id);
+                                        },
+                                    ))
+                                    .child("Cancel"),
+                            )
+                            .into_any_element(),
+                    );
+                }
+                if rows.is_empty() {
+                    rows.push(
                         div()
-                            .w(px(140.))
-                            .text_sm()
-                            .text_color(theme.text)
-                            .child(self.site_notice.clone().unwrap_or(title)),
-                    ),
-            )
+                            .px(px(8.))
+                            .py(px(4.))
+                            .child("No downloads")
+                            .into_any_element(),
+                    );
+                }
+                d.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .w_full()
+                        .bg(gpui::white())
+                        .children(rows),
+                )
+            })
             .when(!suggestions.is_empty(), |d| {
                 d.child(
                     div()
                         .flex()
                         .flex_col()
                         .w_full()
-                        .px(px(8.))
-                        .bg(gpui::white())
+                        .px(px(8.0))
+                        .bg(theme.surface)
                         .children(suggestions),
                 )
             })
@@ -1550,8 +1876,9 @@ impl<E: Engine + 'static, S: Store + 'static> Render for BrowserWindow<E, S> {
                 },
             ))
             .on_action(cx.listener(
-                |this: &mut Self, _: &crate::actions::devtools::Toggle, _window, _cx| {
+                |this: &mut Self, _: &crate::actions::devtools::Toggle, _window, cx| {
                     this.toggle_devtools();
+                    cx.notify();
                 },
             ))
     }
@@ -1577,3 +1904,5 @@ fn truncate_text(text: &str, max: usize) -> String {
     }
     out
 }
+
+pub use crate::layout::content_rect;

@@ -50,6 +50,45 @@ pub struct Bookmark {
     pub created: jiff::Timestamp,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DownloadState {
+    InProgress,
+    Completed,
+    Cancelled,
+    Failed,
+}
+
+impl DownloadState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::InProgress => "in_progress",
+            Self::Completed => "completed",
+            Self::Cancelled => "cancelled",
+            Self::Failed => "failed",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "in_progress" => Some(Self::InProgress),
+            "completed" => Some(Self::Completed),
+            "cancelled" => Some(Self::Cancelled),
+            "failed" => Some(Self::Failed),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DownloadRow {
+    pub id: i64,
+    pub url: String,
+    pub path: String,
+    pub bytes: u64,
+    pub total: Option<u64>,
+    pub state: DownloadState,
+}
+
 pub trait Store {
     fn record_visit(&self, url: &Url, title: &str, at: jiff::Timestamp) -> Result<()>;
     fn set_title(&self, url: &Url, title: &str) -> Result<()>;
@@ -60,6 +99,22 @@ pub trait Store {
     fn search_bookmarks(&self, q: &str, limit: usize) -> Result<Vec<Bookmark>>;
     fn save_session(&self, s: &SessionSnapshot) -> Result<()>;
     fn load_session(&self) -> Result<Option<SessionSnapshot>>;
+    fn record_download(
+        &self,
+        url: &str,
+        path: &str,
+        bytes: u64,
+        total: Option<u64>,
+        state: DownloadState,
+    ) -> Result<i64>;
+    fn list_downloads(&self) -> Result<Vec<DownloadRow>>;
+    fn update_download(
+        &self,
+        id: i64,
+        bytes: u64,
+        total: Option<u64>,
+        state: DownloadState,
+    ) -> Result<()>;
 }
 
 pub(crate) fn score_at(count: i64, last_visit: jiff::Timestamp, now: jiff::Timestamp) -> f64 {

@@ -11,6 +11,19 @@ pub struct Args {
     /// URLs to open.
     #[arg(value_name = "URL")]
     pub urls: Vec<String>,
+
+    /// Capture a screenshot of the window to this PNG path and quit.
+    #[arg(long)]
+    pub screenshot: Option<String>,
+
+    /// Start Firefox DevTools remote debugging on 127.0.0.1:<port>
+    /// (default port from settings, 6000).
+    #[arg(long, value_name = "PORT", num_args = 0..=1, default_missing_value = "0")]
+    pub devtools: Option<u16>,
+
+    /// Delay in milliseconds before capturing the screenshot.
+    #[arg(long, default_value_t = 3000)]
+    pub screenshot_delay_ms: u64,
 }
 
 pub fn parse() -> Args {

@@ -120,6 +120,23 @@ impl Default for AdblockSettings {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
+pub struct DownloadsSettings {
+    pub dir: String,
+}
+
+impl Default for DownloadsSettings {
+    fn default() -> Self {
+        let dir = dirs::home_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("Downloads");
+        Self {
+            dir: dir.to_string_lossy().into_owned(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
 pub struct HangSettings {
     pub timeout_seconds: u64,
 }
@@ -133,12 +150,18 @@ impl Default for HangSettings {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct DevtoolsSettings {
+    /// Start Servo's remote debugging server (Firefox DevTools) at launch.
+    pub enabled: bool,
+    /// Port on 127.0.0.1.
     pub port: u16,
 }
 
 impl Default for DevtoolsSettings {
     fn default() -> Self {
-        Self { port: 7000 }
+        Self {
+            enabled: false,
+            port: 6000,
+        }
     }
 }
 
@@ -151,6 +174,7 @@ pub struct Settings {
     pub tabs: TabSettings,
     pub sites: SitesSettings,
     pub adblock: AdblockSettings,
+    pub downloads: DownloadsSettings,
     pub hang: HangSettings,
     pub devtools: DevtoolsSettings,
 }

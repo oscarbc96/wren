@@ -20,7 +20,7 @@ impl ToolbarState {
     }
 
     pub fn chrome_height(&self) -> f32 {
-        72.0
+        78.0
     }
 
     pub fn focus_omnibox(&mut self) {
