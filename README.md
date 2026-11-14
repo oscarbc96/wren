@@ -1,7 +1,10 @@
 # Wren
 
-Open-source, low-resource desktop browser, written in Rust on
-[GPUI](https://gpui.rs) and [Servo](https://servo.org).
+Open-source browser with generative UI on top: the AI gets tools to read
+and act on web pages with your own logins, and builds pages made for you
+(a train comparison you can book from, a dashboard condensing your three
+newspapers) that you can save, re-check and turn into routines. Written in
+Rust on [GPUI](https://gpui.rs) and [Servo](https://servo.org).
 
 Pre-alpha. Design spec: `docs/superpowers/specs/2026-11-13-wren-browser-design.md`.
 Implementation plans: `docs/superpowers/plans/`.

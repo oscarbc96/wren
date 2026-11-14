@@ -27,7 +27,7 @@ page has no network access of its own.
 Bun bundler.
 
 **Spec:** `docs/superpowers/specs/2026-11-13-wren-browser-design.md`
-(sections 5b, 8.4, 8.5, 9, 10 M5, 11 reader RSS rule).
+(sections 1, 5b, 8.4, 8.4a, 8.5, 9, 10 M5, 11 reader RSS rule).
 Roadmap: `docs/superpowers/plans/2026-11-13-roadmap.md`.
 
 ## Global Constraints
@@ -170,8 +170,27 @@ Roadmap: `docs/superpowers/plans/2026-11-13-roadmap.md`.
 - [ ] **Step 4: Run** tests; screenshot of the sidebar Pinned tab.
 - [ ] **Step 5: Commit** `feat(genui): pin and refresh generated pages`
 
+### Task 5a: Logged-in site tools, per-site consent, re-check
+
+**Files:**
+- Create: `crates/genui/src/site_tools.rs`, `crates/genui/src/consent.rs`, `crates/genui/src/recheck.rs`
+- Modify: `crates/agent` (`read_page` gains `Session::Profile | Session::Anonymous`), `crates/wren/src/internal_pages.rs` (`wren://settings` site list), `crates/store` (migration: `site_consent`, `pin_snapshots`)
+- Test: `crates/genui/tests/{site_tools.rs,consent.rs,recheck.rs}`
+
+**Interfaces:**
+- Tools for generated pages and the generator (spec 8.4a): `site.open(url) -> TabRef`, `site.read(target) -> SiteRead { url, title, text, outline, tables, forms }`, `site.act(tab, Step)` (consequential steps through M4 policy confirm). `site.read` with `Session::Profile` uses an M3 hidden webview on the user's profile; without consent it fails with `ToolError::ConsentRequired(origin)` and the page shows the one-time prompt.
+- `Consent::{check(origin) -> Grant, grant(origin), revoke(origin)}`; origins whose category is banking, mail or health return `Grant::AskEachTime`.
+- `Recheck::{run(pin) -> Diff, set_alert(pin, Condition)}`: stores the last tool data per pin, returns changed blocks for highlighting, fires a macOS notification when `Condition` (number threshold on a bound value, or text contains) turns true; no model call.
+- Provider disclosure: every generation records which origins' text was sent, shown in the page's sources panel.
+
+- [ ] **Step 1: Write failing tests**: `profile_read_requires_consent`, `consent_remembered_per_origin`, `sensitive_category_asks_each_time`, `anonymous_read_uses_reader_without_cookies`, `recheck_highlights_changed_blocks`, `alert_fires_once_when_condition_turns_true`, `recheck_makes_no_model_call`, `disclosure_lists_sent_origins`.
+- [ ] **Step 2: Run** `cargo nextest run -p genui -p agent`. Expected: FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** tests; by hand: "dashboard of my three newspapers" with three logged-in news sites produces one grouped, cited page; pin it with a daily re-check; a train search on a logged-in rail site produces a comparison page whose "Book" opens the flow in a tab and stops at payment. Screenshots of both.
+- [ ] **Step 5: Commit** `feat(genui): logged-in site tools, consent and re-check`
+
 ### Task 6: Milestone exit
 
 - [ ] **Step 1:** RAM benchmark tabs10/tabs20 vs Chrome (no regression above 10% against M4); reader helper peak RSS and idle exit recorded; one generated page open adds how much.
-- [ ] **Step 2:** M5 exit: with Ollama + SearXNG (documented free path) and with one keyed pair, three questions produce cited pages; a follow-up edits one; a pinned page refreshes without a model call (provider request log shows none). Record in `docs/research/perf/<date>-m5.md`.
+- [ ] **Step 2:** M5 exit: with Ollama + SearXNG (documented free path) and with one keyed pair, three questions produce cited pages; a follow-up edits one; a pinned page refreshes without a model call (provider request log shows none); the newspaper dashboard and train comparison from Task 5a work on the owner's logins. Record in `docs/research/perf/<date>-m5.md`.
 - [ ] **Step 3:** Roadmap status; **Commit** `chore: m5 exit and measurements`

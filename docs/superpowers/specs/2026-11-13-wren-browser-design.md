@@ -1,19 +1,34 @@
-# Wren: a low-RAM, AI-native desktop browser in Rust
+# Wren: a generative-UI browser in Rust
 
 Status: draft for review, 2026-11-13. "Wren" is a working name (placeholder).
 
 ## 1. Intent and why
 
-Chrome is the default browser for most people and it is heavy: hundreds of
-MB idle, well over 1 GB with a normal tab load. Every serious alternative is
-either Chromium underneath (Brave, Edge, Arc, Dia) or not yet usable day to
-day (Servo's demo shell, Ladybird alpha). Nobody ships a maintained,
-full-featured browser on the Rust Servo engine; the last attempt (Verso)
-was archived in Oct 2025 because it could not keep pace with Servo.
+Wren's moat (owner decision, 2026-11-14) is **generative UI on top of a
+real browser**. Search engines and chat assistants answer from the public
+web; Wren is the browser, so it already holds the user's logins, tabs,
+history and subscriptions. Wren gives the model tools to open and read web
+pages in the user's own sessions and to build **generated pages**: adaptive
+UIs made for this user and this task, which can be saved, re-checked later
+without asking the model again, and turned into repeatable routines.
 
-Wren is that browser: a product shell around the Servo engine, with the
-features people need to leave Chrome (extensions, password managers,
-DevTools) and an AI layer that is designed in, not bolted on.
+Examples that define the product:
+- "Book me a train to Madrid on Friday morning": a generated page lists the
+  options from the rail sites the user is logged into, with prices, times
+  and seats, and a "Book" button that runs the booking in a tab and stops
+  for confirmation before paying.
+- "Morning briefing from my three newspapers": one dashboard condensing the
+  front pages of three papers the user subscribes to (read with their own
+  subscriptions), grouped by story, every block linked to its source,
+  re-checked every morning.
+- Repetitive tasks: "my usual Friday pizza order", "tell me when this flight
+  drops below EUR 120", "fill this weekly timesheet".
+
+The rest of the browser exists to make that layer trustworthy and usable
+every day: it runs on the Rust Servo engine (no maintained browser does),
+keeps RAM measured against Chrome, and covers what people need to leave
+Chrome (extensions, password managers, DevTools). Those are table stakes;
+the generated-UI layer is the reason to switch.
 
 Who it is for, in order:
 1. The owner, as an everyday browser (dogfooding drives priorities).
@@ -23,9 +38,14 @@ Who it is for, in order:
 
 ## 2. Goals
 
+- **Generative UI is the product (the moat)**: the model gets tools to open
+  and read pages in the user's logged-in sessions, act in tabs, and build
+  generated pages (adaptive UIs) that can be saved, re-checked and rerun
+  as routines (sections 8.4 to 8.7). Every other goal serves this one.
 - **Daily-driver browser on Servo**, macOS first.
 - **Low RAM as a measured, public claim**, benchmarked against Chrome on the
-  same workloads every release.
+  same workloads every release (a supporting claim, no longer the reason
+  to exist).
 - **Chrome parity tracked, not guessed**: web-platform-tests, top sites,
   top extensions and RAM, all versus Chrome, in CI with a published
   dashboard.
@@ -57,14 +77,17 @@ Who it is for, in order:
 - 100% Chrome extension compatibility. Extensions that rely on Chromium
   internals (e.g. chrome.debugger internals, NaCl, enterprise policies)
   are out.
-- Embedding Chromium (CEF) as a second engine.
+- Embedding Chromium (CEF) as a second engine (re-checked 2026-11-14 in
+  `docs/research/2026-11-14-cef-comparison.md`).
 - NPAPI or other legacy plugins.
 - Mobile in v1. Windows and Linux come after macOS, not in v1.
 - Our own sync service and hosted models in the open-source core.
 
 ## 4. Anti-goals (failure even if it "works")
 
-- RAM ends up close to Chrome's. The reason to exist is gone.
+- Generated pages that are no better than opening the sites: slow,
+  generic, or blind to what the user's logins can see.
+- RAM ends up well above Chrome's on the same workloads.
 - A fork of servoshell that has to be hand-merged every Servo release
   (the Verso failure mode).
 - The AI acts with money, messages or accounts without explicit user
@@ -432,6 +455,30 @@ Rules:
   interface so the generator format can change (e.g. A2UI) without touching
   the rest.
 
+### 8.4a Logged-in sources and adaptive pages
+
+- **Site tools**: the model reads and acts on pages through Wren tools, not
+  raw HTTP: `site.open(url)`, `site.read(tab_or_url)` (text, outline,
+  tables, forms), `site.act(tab, step)` (click, fill, select) and the
+  site's own WebMCP tools when it offers them. Reads that need the user's
+  session run in a **hidden webview on the user's profile** (same cookies
+  and logins as their tabs); the cookie-less `reader` is only for the
+  public web.
+- **Per-site consent**: the first time a generated page or routine reads a
+  site with the user's session, Wren asks once per site ("Let Wren read
+  renfe.com with your login for generated pages?"), remembered in
+  settings, revocable on `wren://settings`. Banking, mail and health
+  categories always ask per use.
+- **Adaptive pages**: the generator sees what the user's sessions return
+  (their fare class, saved addresses, subscriptions, loyalty numbers) and
+  lays the page out for this task: a comparison table for trains, a
+  grouped story list for newspapers, a form prefilled from the user's
+  details. Actions on a page (`Mutation`/`Action`) run in a visible tab
+  through the agent and stop for confirmation under the 8.2 rules.
+- **What leaves the machine**: page text sent to the model is shown per
+  page ("Sent to <provider>: 3 pages from renfe.com, iryo.es"). Cookies,
+  passwords and raw HTML never do.
+
 ### 8.5 Pinned and live generated pages
 
 - OpenUI Lang supports `Query("tool", args)`, `Mutation(...)`, `$state`
@@ -444,6 +491,11 @@ Rules:
   model is only called when the user asks to change the page.
 - Pinned pages live in the sidebar and can be the output of routines
   ("morning briefing", "flight prices BCN-LON").
+- **Re-check**: a pinned page re-runs its tools (logged-in site reads
+  included) on open and on schedule, highlights what changed since the
+  last view, and can notify on a condition the user sets ("price below
+  EUR 120", "new story about X"). Still no model call unless the user asks
+  to change the page.
 
 ### 8.6 Routines (`routines`)
 
@@ -477,6 +529,12 @@ Rules:
 ## 10. Milestones
 
 Each ends with something usable and measured.
+
+**Order (owner decision, 2026-11-14):** after M2, the generative-UI path
+comes first: M4 AI core, M5 Generated pages (with logged-in sources and
+re-check), M6 Routines, then M3 Extensions and M7 Plugins. M3 Task 2
+(engine hooks: custom scheme, user scripts, hidden webviews) still lands
+early because generated pages and logged-in reads need it.
 
 1. **M0 Shell**: window, tabs, omnibox, history, bookmarks, embedded Servo,
    one content process per tab (Servo multiprocess) with crash recovery.
