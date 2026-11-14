@@ -79,11 +79,7 @@ run = "hk fix --all"
 
 [tasks.bundle]
 description = "Build the Wren.app dev bundle into target/release, signed with the dev identity (ad hoc without it)"
-run = [
-  "cargo build --release -p wren",
-  "cargo packager -p wren --release --formats app --out-dir target/release",
-  "scripts/dev-sign.sh --adhoc-fallback target/release/Wren.app",
-]
+run = "scripts/bundle.sh"
 
 [tasks."bundle:run"]
 description = "Run the bundled app so logs reach the terminal"

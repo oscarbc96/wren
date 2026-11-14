@@ -53,3 +53,12 @@ embedder-traits = { package = "servo-embedder-traits", version = "=0.8.0" }
 tracing = "0.1"
 sysinfo = { workspace = true }
 reqwest = { workspace = true }
+
+[package.metadata.packager]
+product-name = "Wren"
+identifier = "io.github.oscarbc96.wren"
+icons = ["../../assets/macos/wren.icns"]
+formats = ["app"]
+
+[package.metadata.packager.macos]
+minimum-system-version = "14.0"
