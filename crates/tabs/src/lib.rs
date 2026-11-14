@@ -481,7 +481,7 @@ impl TabStrip {
                     self.changed_flag = true;
                 }
             }
-            EngineEvent::NavigationDenied { .. } => {}
+            EngineEvent::NavigationDenied { .. } | EngineEvent::Download { .. } => {}
         }
     }
 

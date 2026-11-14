@@ -36,6 +36,7 @@ rusqlite_migration = "2.7"
 insta = "1.49"
 tempfile = "3"
 dirs = "7"
+reqwest = { version = "0.13.5", default-features = false, features = ["blocking", "rustls"] }
 
 # Keep debug builds small on disk: line tables keep backtraces readable,
 # dependencies carry no debug info.

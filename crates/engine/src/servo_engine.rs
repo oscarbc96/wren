@@ -27,6 +27,21 @@ use std::time::{Duration, Instant};
 use sysinfo::{Pid, ProcessesToUpdate, System};
 use url::Url;
 
+fn is_download_url(url: &Url) -> bool {
+    let path = url.path().to_ascii_lowercase();
+    const EXTS: &[&str] = &[
+        ".zip", ".dmg", ".pkg", ".pdf", ".csv", ".xlsx", ".docx", ".mp4", ".tar.gz",
+    ];
+    EXTS.iter().any(|ext| path.ends_with(ext))
+}
+
+fn suggested_name_from_url(url: &Url) -> Option<String> {
+    url.path_segments()
+        .and_then(|mut s| s.rfind(|x| !x.is_empty()))
+        .map(|s| s.to_string())
+        .filter(|s| !s.is_empty())
+}
+
 /// Returns the content-process token when args contain `--content-process <token>`.
 pub fn content_process_token(args: &[String]) -> Option<String> {
     let mut iter = args.iter();
@@ -267,13 +282,23 @@ impl WebViewDelegate for Delegate {
             .as_ref()
             .map(|f| f(&url))
             .unwrap_or(true);
-        if allowed {
-            request.allow();
-        } else {
+        if !allowed {
             request.deny();
             self.events
                 .push(EngineEvent::NavigationDenied { id: self.id, url });
+            return;
         }
+        if is_download_url(&url) {
+            request.deny();
+            let suggested_name = suggested_name_from_url(&url);
+            self.events.push(EngineEvent::Download {
+                id: self.id,
+                url,
+                suggested_name,
+            });
+            return;
+        }
+        request.allow();
     }
 
     fn load_web_resource(&self, _webview: WebView, load: servo::WebResourceLoad) {

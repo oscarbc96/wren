@@ -28,6 +28,7 @@ serde_json = { workspace = true }
 raw-window-handle = { workspace = true }
 rustls = { version = "0.23", features = ["aws_lc_rs"] }
 sysinfo = { workspace = true }
+reqwest = { workspace = true }
 
 [dev-dependencies]
 gpui = { workspace = true, features = ["test-support"] }
@@ -45,3 +46,4 @@ objc2-foundation = "0.3"
 embedder-traits = { package = "servo-embedder-traits", version = "=0.8.0" }
 tracing = "0.1"
 sysinfo = { workspace = true }
+reqwest = { workspace = true }

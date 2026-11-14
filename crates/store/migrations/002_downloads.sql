@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS downloads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    url TEXT NOT NULL,
+    path TEXT NOT NULL,
+    bytes INTEGER NOT NULL DEFAULT 0,
+    total INTEGER,
+    state TEXT NOT NULL
+);

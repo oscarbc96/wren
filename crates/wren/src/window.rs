@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use crate::open_in_chrome::{self, Opener, SystemOpener};
@@ -12,10 +13,11 @@ use gpui::{
     Render, ScrollWheelEvent, Window, div, prelude::*, px,
 };
 use settings::Settings;
-use store::Store;
+use store::{DownloadRow, Store};
 use tabs::{TabId, TabState, TabStrip};
 use url::Url;
 
+use crate::downloads::{DownloadHandle, DownloadMsg};
 use crate::toolbar::ToolbarState;
 use themes::ActiveTheme;
 
@@ -37,11 +39,17 @@ pub struct BrowserWindow<E: Engine + 'static, S: Store + 'static> {
     pub password_status: Option<String>,
     pub site_notice: Option<String>,
     pub tab_menu: Option<TabId>,
+    pub downloads: Vec<DownloadRow>,
+    pub downloads_panel_open: bool,
+    pub active_downloads: usize,
+    pub download_progress: Option<(u64, Option<u64>)>,
     content_origin: Point<Pixels>,
     last_save: Option<Instant>,
     dirty_since: Option<Instant>,
     last_sleep_check: Option<Instant>,
     shutting_down: bool,
+    download_rx: Option<mpsc::Receiver<DownloadMsg>>,
+    download_handles: std::collections::HashMap<i64, DownloadHandle>,
 }
 
 impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
@@ -185,6 +193,10 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
             password_status: None,
             site_notice: None,
             tab_menu: None,
+            downloads: Vec::new(),
+            downloads_panel_open: false,
+            active_downloads: 0,
+            download_progress: None,
             content_origin: Point {
                 x: px(0.),
                 y: px(0.),
@@ -193,6 +205,8 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
             dirty_since: None,
             last_sleep_check: Some(Instant::now()),
             shutting_down: false,
+            download_rx: None,
+            download_handles: std::collections::HashMap::new(),
         }
     }
 
@@ -331,6 +345,7 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
         for ev in events {
             self.handle_event(&ev);
         }
+        self.poll_downloads();
 
         if self.strip.changed() {
             self.dirty_since = Some(Instant::now());
@@ -431,6 +446,14 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
         if let EngineEvent::NavigationDenied { url, .. } = ev {
             self.open_external(url.clone());
         }
+        if let EngineEvent::Download {
+            id: _,
+            url,
+            suggested_name,
+        } = ev
+        {
+            self.start_download(url.clone(), suggested_name.clone());
+        }
         self.strip.apply(&mut self.engine, ev);
         if let Some(tab) = self.active_tab().cloned() {
             self.toolbar.url_text = tab.url.to_string();
@@ -501,6 +524,77 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
         self.shutting_down = true;
         self.save_session_now();
         self.engine.shutdown();
+    }
+
+    pub fn start_download(&mut self, url: Url, suggested_name: Option<String>) {
+        let dir = std::path::PathBuf::from(&self.settings.downloads.dir);
+        let (tx, rx) = mpsc::channel();
+        self.download_rx = Some(rx);
+        let handle =
+            crate::downloads::start_download(self.store.clone(), url, suggested_name, dir, tx);
+        self.download_handles.insert(handle.id, handle);
+        self.active_downloads = self.active_downloads.saturating_add(1);
+        self.refresh_downloads();
+    }
+
+    pub fn refresh_downloads(&mut self) {
+        if let Ok(list) = self.store.list_downloads() {
+            self.downloads = list;
+            self.active_downloads = self
+                .downloads
+                .iter()
+                .filter(|d| d.state == store::DownloadState::InProgress)
+                .count();
+            self.download_progress = self
+                .downloads
+                .iter()
+                .rev()
+                .find(|d| d.state == store::DownloadState::InProgress)
+                .map(|d| (d.bytes, d.total));
+        }
+    }
+
+    pub fn poll_downloads(&mut self) {
+        let mut got = false;
+        if let Some(rx) = &self.download_rx {
+            while let Ok(msg) = rx.try_recv() {
+                got = true;
+                match msg {
+                    DownloadMsg::Started {
+                        id: _,
+                        path: _,
+                        total: _,
+                    }
+                    | DownloadMsg::Progress { .. }
+                    | DownloadMsg::Finished { .. }
+                    | DownloadMsg::Failed { .. }
+                    | DownloadMsg::Cancelled { .. } => {}
+                }
+            }
+        }
+        if got {
+            self.refresh_downloads();
+            let done: Vec<i64> = self
+                .downloads
+                .iter()
+                .filter(|d| d.state != store::DownloadState::InProgress)
+                .map(|d| d.id)
+                .collect();
+            for id in done {
+                self.download_handles.remove(&id);
+            }
+        }
+    }
+
+    pub fn cancel_download(&mut self, id: i64) {
+        if let Some(h) = self.download_handles.get(&id) {
+            h.cancel.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+
+    pub fn toggle_downloads_panel(&mut self) {
+        self.downloads_panel_open = !self.downloads_panel_open;
+        self.refresh_downloads();
     }
 
     pub fn focus_omnibox_window(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -906,6 +1000,27 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
                             }))
                             .child(url_display),
                     )
+                    .child({
+                        let label = if self.active_downloads > 0 {
+                            match self.download_progress {
+                                Some((b, Some(t))) if t > 0 => {
+                                    format!("Downloads {}%", (b.saturating_mul(100) / t).min(100))
+                                }
+                                _ => format!("Downloads ({})", self.active_downloads),
+                            }
+                        } else {
+                            "Downloads".to_string()
+                        };
+                        div()
+                            .id("downloads-button")
+                            .cursor_pointer()
+                            .on_click(cx.listener(
+                                |this: &mut Self, _: &ClickEvent, _window, _cx| {
+                                    this.toggle_downloads_panel();
+                                },
+                            ))
+                            .child(label)
+                    })
                     .child(
                         div()
                             .w(px(140.))
@@ -914,6 +1029,90 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
                             .child(self.site_notice.clone().unwrap_or(title)),
                     ),
             )
+            .when(self.downloads_panel_open, |d| {
+                let mut rows = Vec::new();
+                for (i, dl) in self.downloads.iter().rev().take(20).enumerate() {
+                    let path = dl.path.clone();
+                    let path_open = dl.path.clone();
+                    let path_show = dl.path.clone();
+                    let id = dl.id;
+                    let state = format!("{:?}", dl.state);
+                    let progress = match dl.total {
+                        Some(t) if t > 0 => format!("{} / {} ({})", dl.bytes, t, state),
+                        _ => format!("{} ({})", dl.bytes, state),
+                    };
+                    let name = std::path::Path::new(&path)
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or(&path)
+                        .to_string();
+                    rows.push(
+                        div()
+                            .id(("dl-row", i))
+                            .flex()
+                            .items_center()
+                            .gap(px(8.))
+                            .px(px(8.))
+                            .py(px(4.))
+                            .child(div().flex_1().child(format!("{name} - {progress}")))
+                            .child(
+                                div()
+                                    .id(("dl-open", i))
+                                    .cursor_pointer()
+                                    .on_click(cx.listener(
+                                        move |_this: &mut Self, _: &ClickEvent, _w, _cx| {
+                                            let _ = std::process::Command::new("open")
+                                                .arg(&path_open)
+                                                .spawn();
+                                        },
+                                    ))
+                                    .child("Open"),
+                            )
+                            .child(
+                                div()
+                                    .id(("dl-show", i))
+                                    .cursor_pointer()
+                                    .on_click(cx.listener(
+                                        move |_this: &mut Self, _: &ClickEvent, _w, _cx| {
+                                            let _ = std::process::Command::new("open")
+                                                .args(["-R", &path_show])
+                                                .spawn();
+                                        },
+                                    ))
+                                    .child("Show in Finder"),
+                            )
+                            .child(
+                                div()
+                                    .id(("dl-cancel", i))
+                                    .cursor_pointer()
+                                    .on_click(cx.listener(
+                                        move |this: &mut Self, _: &ClickEvent, _w, _cx| {
+                                            this.cancel_download(id);
+                                        },
+                                    ))
+                                    .child("Cancel"),
+                            )
+                            .into_any_element(),
+                    );
+                }
+                if rows.is_empty() {
+                    rows.push(
+                        div()
+                            .px(px(8.))
+                            .py(px(4.))
+                            .child("No downloads")
+                            .into_any_element(),
+                    );
+                }
+                d.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .w_full()
+                        .bg(gpui::white())
+                        .children(rows),
+                )
+            })
             .when(!suggestions.is_empty(), |d| {
                 d.child(
                     div()

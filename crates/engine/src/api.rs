@@ -55,6 +55,11 @@ pub enum EngineEvent {
         id: WebViewId,
         url: Url,
     },
+    Download {
+        id: WebViewId,
+        url: Url,
+        suggested_name: Option<String>,
+    },
 }
 
 /// Filter for navigations: return `false` to deny.
