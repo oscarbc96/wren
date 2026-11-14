@@ -2,7 +2,7 @@
 
 use crate::api::{
     Engine, EngineEvent, EngineInput, LoadState, Modifiers, MouseButton, NavigationFilter,
-    ViewRect, WebViewId,
+    RequestFilter, RequestKind, ViewRect, WebViewId,
 };
 use anyhow::{Context, Result};
 use dpi::PhysicalSize;
@@ -198,6 +198,7 @@ struct Delegate {
     id: WebViewId,
     events: EventQueue,
     navigation_filter: Rc<std::cell::RefCell<Option<NavigationFilter>>>,
+    filter: std::rc::Rc<std::cell::RefCell<Option<RequestFilter>>>,
 }
 
 impl WebViewDelegate for Delegate {
@@ -274,6 +275,47 @@ impl WebViewDelegate for Delegate {
                 .push(EngineEvent::NavigationDenied { id: self.id, url });
         }
     }
+
+    fn load_web_resource(&self, _webview: WebView, load: servo::WebResourceLoad) {
+        let req = load.request();
+        let url = req.url.as_url().clone();
+        let source = req
+            .referrer_url
+            .as_ref()
+            .map(|u| u.as_url().clone())
+            .unwrap_or_else(|| url.clone());
+        let kind = match req.destination {
+            content_security_policy::Destination::Document
+            | content_security_policy::Destination::Frame
+            | content_security_policy::Destination::IFrame => RequestKind::Document,
+            content_security_policy::Destination::Script => RequestKind::Script,
+            content_security_policy::Destination::Image => RequestKind::Image,
+            content_security_policy::Destination::Style => RequestKind::Stylesheet,
+            content_security_policy::Destination::Font => RequestKind::Font,
+            content_security_policy::Destination::Audio
+            | content_security_policy::Destination::Video
+            | content_security_policy::Destination::Track => RequestKind::Media,
+            _ => RequestKind::Other,
+        };
+        // XHR/fetch destinations often report as None/Json/Text; treat Json/Text as Xhr.
+        let kind = if matches!(
+            req.destination,
+            content_security_policy::Destination::Json | content_security_policy::Destination::Text
+        ) {
+            RequestKind::Xhr
+        } else {
+            kind
+        };
+
+        let blocked = {
+            let f = self.filter.borrow();
+            f.as_ref().map(|f| f(&url, &source, kind)).unwrap_or(false)
+        };
+        if blocked && kind != RequestKind::Document {
+            let intercepted = load.intercept(servo::WebResourceResponse::new(url.clone()));
+            intercepted.finish();
+        }
+    }
 }
 
 struct WebViewEntry {
@@ -307,6 +349,7 @@ pub struct ServoEngine {
     events: EventQueue,
     shown: Option<WebViewId>,
     navigation_filter: Rc<std::cell::RefCell<Option<NavigationFilter>>>,
+    request_filter: std::rc::Rc<std::cell::RefCell<Option<RequestFilter>>>,
 }
 
 impl ServoEngine {
@@ -370,6 +413,7 @@ impl ServoEngine {
             events: EventQueue::default(),
             shown: None,
             navigation_filter: Rc::new(std::cell::RefCell::new(None)),
+            request_filter: std::rc::Rc::new(std::cell::RefCell::new(None)),
         })
     }
 
@@ -479,6 +523,7 @@ impl Engine for ServoEngine {
             id,
             events: self.events.clone(),
             navigation_filter: self.navigation_filter.clone(),
+            filter: self.request_filter.clone(),
         });
         let webview = WebViewBuilder::new(self.servo(), self.rendering_context.clone())
             .url(url.clone())
@@ -616,6 +661,10 @@ impl Engine for ServoEngine {
 
     fn drain_events(&mut self) -> Vec<EngineEvent> {
         self.events.drain()
+    }
+
+    fn set_request_filter(&mut self, f: RequestFilter) {
+        *self.request_filter.borrow_mut() = Some(f);
     }
 
     fn shutdown(&mut self) {

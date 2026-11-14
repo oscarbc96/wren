@@ -12,5 +12,7 @@ objc2-app-kit = { workspace = true }
 objc2 = "0.6"
 objc2-foundation = "0.3"
 anyhow = { workspace = true }
+adblock_rules = { path = "../adblock_rules" }
+content-security-policy = "0.9"
 sysinfo = { workspace = true }
 dpi = "0.1.2"

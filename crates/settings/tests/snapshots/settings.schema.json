@@ -30,6 +30,12 @@
       "default": {
         "open_in_chrome": []
       }
+    },
+    "adblock": {
+      "$ref": "#/$defs/AdblockSettings",
+      "default": {
+        "enabled": true
+      }
     }
   },
   "$defs": {
@@ -87,6 +93,15 @@
             "type": "string"
           },
           "default": []
+        }
+      }
+    },
+    "AdblockSettings": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
         }
       }
     }

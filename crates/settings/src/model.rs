@@ -106,6 +106,18 @@ pub struct SitesSettings {
     pub open_in_chrome: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct AdblockSettings {
+    pub enabled: bool,
+}
+
+impl Default for AdblockSettings {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
+}
+
 /// All user-visible settings.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
@@ -114,4 +126,5 @@ pub struct Settings {
     pub startup: StartupSettings,
     pub tabs: TabSettings,
     pub sites: SitesSettings,
+    pub adblock: AdblockSettings,
 }

@@ -9,6 +9,8 @@ use settings::{ConfigPaths, SettingsStore};
 use store::SqliteStore;
 use url::Url;
 
+use engine::Engine;
+
 use crate::actions;
 use crate::cli::Args;
 use crate::window::BrowserWindow;
@@ -30,6 +32,30 @@ pub fn run_with_args(args: Args) {
     let store = Arc::new(SqliteStore::open(&store_path).expect("open store"));
     let settings_store = SettingsStore::load(paths.clone());
     let settings = settings_store.current().clone();
+
+    let adblock_dir = data_dir.join("adblock");
+    let mut cached_lists: Vec<String> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&adblock_dir) {
+        for entry in entries.flatten() {
+            if entry.path().extension().and_then(|e| e.to_str()) == Some("txt")
+                && let Ok(text) = std::fs::read_to_string(entry.path())
+            {
+                cached_lists.push(text);
+            }
+        }
+    }
+    let blocker = if settings.adblock.enabled {
+        let refs: Vec<&str> = cached_lists.iter().map(|s| s.as_str()).collect();
+        Some(std::rc::Rc::new(adblock_rules::Blocker::from_lists(&refs)))
+    } else {
+        None
+    };
+    if settings.adblock.enabled {
+        let dir = adblock_dir.clone();
+        std::thread::spawn(move || {
+            let _ = adblock_rules::update_lists(&dir);
+        });
+    }
 
     let urls: Vec<Url> = args
         .urls
@@ -59,7 +85,13 @@ pub fn run_with_args(args: Args) {
                 let raw_wh = <gpui::Window as HasWindowHandle>::window_handle(window)
                     .expect("raw window handle");
                 let waker: Arc<dyn Fn() + Send + Sync> = Arc::new(|| {});
-                let engine = engine::ServoEngine::new(raw_wh, waker).expect("servo engine");
+                let mut engine = engine::ServoEngine::new(raw_wh, waker).expect("servo engine");
+                if let Some(b) = &blocker {
+                    let b = b.clone();
+                    engine.set_request_filter(Box::new(move |url, source, kind| {
+                        b.should_block(url, source, kind)
+                    }));
+                }
                 cx.new(|cx| {
                     if urls_for_win.is_empty() {
                         BrowserWindow::new(
