@@ -108,7 +108,7 @@ pub fn run_ram(browser: &str, workload: &str, out: &Path) -> Result<RamResult> {
     }
 
     let mut child = cmd.spawn().context("spawn browser")?;
-    std::thread::sleep(std::time::Duration::from_secs(30));
+    std::thread::sleep(std::time::Duration::from_secs(60));
 
     let root_pid = sysinfo::Pid::from_u32(child.id());
     let mut rss_samples = Vec::new();

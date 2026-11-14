@@ -25,6 +25,7 @@ pub enum FakeCall {
     Kill { id: WebViewId },
     Processes,
     MemoryReport,
+    MinimizeMemory,
     SetDevtools { port: Option<u16> },
     DrainEvents,
 }
@@ -161,6 +162,10 @@ impl Engine for FakeEngine {
         } else {
             self.memory_report.clone()
         }
+    }
+
+    fn minimize_memory(&mut self) {
+        self.calls.push(FakeCall::MinimizeMemory);
     }
 
     fn set_devtools(&mut self, port: Option<u16>) -> anyhow::Result<()> {

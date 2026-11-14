@@ -192,6 +192,9 @@ pub trait Engine {
     fn memory_report(&mut self) -> Vec<MemoryRow> {
         Vec::new()
     }
+    /// Requests memory minimization as far as the engine allows (GC, cache
+    /// purges). Default no-op.
+    fn minimize_memory(&mut self) {}
     fn set_devtools(&mut self, _port: Option<u16>) -> anyhow::Result<()> {
         Ok(())
     }

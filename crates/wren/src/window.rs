@@ -16,6 +16,7 @@ use tabs::{TabId, TabState, TabStrip};
 use url::Url;
 
 use crate::downloads::{DownloadHandle, DownloadMsg};
+use crate::memory_pressure::{self, PressureSource};
 use crate::toolbar::ToolbarState;
 use themes::ActiveTheme;
 
@@ -56,6 +57,7 @@ pub struct BrowserWindow<E: Engine + 'static, S: Store + 'static> {
     download_rx: Option<mpsc::Receiver<DownloadMsg>>,
     download_tx: Option<mpsc::Sender<DownloadMsg>>,
     download_handles: std::collections::HashMap<i64, DownloadHandle>,
+    pressure_source: Option<Box<dyn PressureSource + Send>>,
 }
 
 impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
@@ -218,7 +220,12 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
             download_rx: None,
             download_tx: None,
             download_handles: std::collections::HashMap::new(),
+            pressure_source: None,
         }
+    }
+
+    pub fn set_pressure_source(&mut self, source: Box<dyn PressureSource + Send>) {
+        self.pressure_source = Some(source);
     }
 
     fn apply_navigation_filter(&mut self) {
@@ -419,6 +426,15 @@ impl<E: Engine + 'static, S: Store + 'static> BrowserWindow<E, S> {
             self.handle_event(&ev);
         }
         self.poll_downloads();
+
+        if let Some(source) = self.pressure_source.as_mut() {
+            memory_pressure::handle_pressure(
+                source.as_mut(),
+                &mut self.engine,
+                &mut self.strip,
+                self.settings.memory.pressure_response,
+            );
+        }
 
         if self.strip.changed() {
             self.dirty_since = Some(Instant::now());
