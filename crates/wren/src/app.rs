@@ -39,9 +39,7 @@ pub fn run_with_args(args: Args) {
         Some(port) => Some(port),
         None => settings.devtools.enabled.then_some(settings.devtools.port),
     };
-    let cdp_port = args
-        .remote_debugging_port
-        .or_else(|| settings.cdp.enabled.then_some(settings.cdp.port));
+    let cdp_port = crate::cdp_bridge::cdp_port(args.remote_debugging_port, &settings.cdp);
     let engine_options = engine::EngineOptions {
         devtools_port,
         js_gc_profile: settings.memory.js_gc_profile.clone(),

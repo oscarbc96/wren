@@ -274,3 +274,8 @@ pub fn tab_to_target(id: TabId) -> String {
 pub fn target_to_tab(s: &str) -> Option<TabId> {
     u64::from_str_radix(s, 16).ok().map(TabId)
 }
+
+/// The CDP port for this run: the CLI flag wins, then the setting when enabled.
+pub fn cdp_port(flag: Option<u16>, settings: &settings::CdpSettings) -> Option<u16> {
+    flag.or_else(|| settings.enabled.then_some(settings.port))
+}

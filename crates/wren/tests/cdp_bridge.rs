@@ -306,14 +306,7 @@ fn attached_tab_never_sleeps() {
 fn cdp_off_by_default() {
     let settings = Settings::default();
     assert!(!settings.cdp.enabled);
-    // and no server started on default port 9222
-    use std::net::TcpStream;
-    assert!(
-        TcpStream::connect_timeout(
-            &"127.0.0.1:9222".parse().unwrap(),
-            Duration::from_millis(50)
-        )
-        .is_err(),
-        "nothing should listen on 9222 by default"
-    );
+    assert_eq!(settings.cdp.port, 9222);
+    assert_eq!(wren::cdp_bridge::cdp_port(None, &settings.cdp), None);
+    assert_eq!(wren::cdp_bridge::cdp_port(Some(9333), &settings.cdp), Some(9333));
 }
