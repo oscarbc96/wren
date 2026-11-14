@@ -42,23 +42,46 @@ fn wrap_evaluate(expression: &str, _return_by_value: bool, _await_promise: bool)
     )
 }
 
-fn wrap_call(function_declaration: &str, args: &[Value], _return_by_value: bool) -> String {
+fn arg_js(a: &Value) -> String {
+    if let Some(id) = a.get("objectId").and_then(|v| v.as_str()) {
+        let oid = serde_json::to_string(id).unwrap_or_else(|_| "\"\"".into());
+        return format!(
+            "(window.__wrenObjects&&window.__wrenObjects.map?window.__wrenObjects.map[{oid}]:undefined)"
+        );
+    }
+    if let Some(v) = a.get("value") {
+        return v.to_string();
+    }
+    if let Some(s) = a.get("unserializableValue").and_then(|v| v.as_str()) {
+        return serde_json::to_string(s).unwrap_or_else(|_| "\"\"".into());
+    }
+    "undefined".to_string()
+}
+
+fn wrap_call(
+    function_declaration: &str,
+    args: &[Value],
+    _return_by_value: bool,
+    object_id: Option<&str>,
+) -> String {
     let mut argv = String::from("[");
     for (i, a) in args.iter().enumerate() {
         if i > 0 {
             argv.push(',');
         }
-        if let Some(v) = a.get("value") {
-            argv.push_str(&v.to_string());
-        } else if let Some(s) = a.get("unserializableValue").and_then(|v| v.as_str()) {
-            argv.push_str(&format!("\"{s}\""));
-        } else {
-            argv.push_str("undefined");
-        }
+        argv.push_str(&arg_js(a));
     }
     argv.push(']');
+    let this_js = if let Some(id) = object_id {
+        let oid = serde_json::to_string(id).unwrap_or_else(|_| "\"\"".into());
+        format!(
+            "(window.__wrenObjects&&window.__wrenObjects.map?window.__wrenObjects.map[{oid}]:null)"
+        )
+    } else {
+        "null".to_string()
+    };
     format!(
-        "(function(){{try{{var __f=({function_declaration});var __v=__f.apply(null,{argv});return JSON.stringify({{ok:true,type:typeof __v,value:__v}});}}catch(e){{return JSON.stringify({{ok:false,exception:{{type:'string',value:String(e)}},description:String(e)}});}}}})()"
+        "(function(){{if(!window.__wrenObjects)window.__wrenObjects={{map:{{}},next:1}};try{{var __f=({function_declaration});var __v=__f.apply({this_js},{argv});return JSON.stringify({{ok:true,type:typeof __v,value:__v}});}}catch(e){{return JSON.stringify({{ok:false,exception:{{type:'string',value:String(e)}},description:String(e)}});}}}})()"
     )
 }
 
@@ -145,7 +168,8 @@ pub(crate) fn handle(
                 .get("returnByValue")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
-            let js = wrap_call(func, &args, ret);
+            let object_id = params.get("objectId").and_then(|v| v.as_str());
+            let js = wrap_call(func, &args, ret, object_id);
             let (tx, rx) = std::sync::mpsc::channel();
             engine.evaluate(tab.webview, &js, Box::new(move |res| {
                 let out = match res {
