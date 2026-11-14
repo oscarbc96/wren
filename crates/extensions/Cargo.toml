@@ -1,0 +1,22 @@
+[package]
+name = "extensions"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+prost = { version = "0.13", default-features = false, features = ["derive", "std"] }
+rsa = { version = "0.9", features = ["sha2"] }
+sha2 = "0.10"
+p256 = { version = "0.13", features = ["ecdsa"] }
+zip = { version = "9.0", default-features = false, features = ["deflate"] }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+url = { workspace = true }
+store = { path = "../store" }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+rand = "0.8"

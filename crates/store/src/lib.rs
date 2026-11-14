@@ -89,6 +89,15 @@ pub struct DownloadRow {
     pub state: DownloadState,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExtensionRow {
+    pub id: String,
+    pub version: String,
+    pub manifest_json: String,
+    pub path: String,
+    pub enabled: bool,
+}
+
 pub trait Store {
     fn record_visit(&self, url: &Url, title: &str, at: jiff::Timestamp) -> Result<()>;
     fn set_title(&self, url: &Url, title: &str) -> Result<()>;
@@ -115,6 +124,19 @@ pub trait Store {
         total: Option<u64>,
         state: DownloadState,
     ) -> Result<()>;
+
+    fn upsert_extension(
+        &self,
+        id: &str,
+        version: &str,
+        manifest_json: &str,
+        path: &str,
+        enabled: bool,
+    ) -> Result<()>;
+    fn list_extensions(&self) -> Result<Vec<ExtensionRow>>;
+    fn get_extension(&self, id: &str) -> Result<Option<ExtensionRow>>;
+    fn set_extension_enabled(&self, id: &str, enabled: bool) -> Result<()>;
+    fn remove_extension(&self, id: &str) -> Result<()>;
 }
 
 pub(crate) fn score_at(count: i64, last_visit: jiff::Timestamp, now: jiff::Timestamp) -> f64 {

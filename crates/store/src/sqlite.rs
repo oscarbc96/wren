@@ -53,6 +53,14 @@ fn migrate(conn: &mut Connection) -> Result<()> {
         tx.execute_batch(sql)?;
         tx.execute_batch("PRAGMA user_version = 2")?;
         tx.commit()?;
+        current = 2;
+    }
+    if current < 3 {
+        let sql = include_str!("../migrations/003_extensions.sql");
+        let tx = conn.transaction()?;
+        tx.execute_batch(sql)?;
+        tx.execute_batch("PRAGMA user_version = 3")?;
+        tx.commit()?;
     }
     Ok(())
 }
@@ -362,6 +370,91 @@ impl Store for SqliteStore {
             "UPDATE downloads SET bytes = ?2, total = ?3, state = ?4 WHERE id = ?1",
             params![id, bytes as i64, total.map(|t| t as i64), state.as_str()],
         )?;
+        Ok(())
+    }
+
+    fn upsert_extension(
+        &self,
+        id: &str,
+        version: &str,
+        manifest_json: &str,
+        path: &str,
+        enabled: bool,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO extensions (id, version, manifest_json, path, enabled) VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(id) DO UPDATE SET
+               version = excluded.version,
+               manifest_json = excluded.manifest_json,
+               path = excluded.path,
+               enabled = excluded.enabled",
+            params![id, version, manifest_json, path, if enabled { 1i64 } else { 0i64 }],
+        )?;
+        Ok(())
+    }
+
+    fn list_extensions(&self) -> Result<Vec<crate::ExtensionRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, version, manifest_json, path, enabled FROM extensions ORDER BY id ASC",
+        )?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, String>(3)?,
+                    r.get::<_, i64>(4)?,
+                ))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(rows
+            .into_iter()
+            .map(
+                |(id, version, manifest_json, path, enabled)| crate::ExtensionRow {
+                    id,
+                    version,
+                    manifest_json,
+                    path,
+                    enabled: enabled != 0,
+                },
+            )
+            .collect())
+    }
+
+    fn get_extension(&self, id: &str) -> Result<Option<crate::ExtensionRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, version, manifest_json, path, enabled FROM extensions WHERE id = ?1",
+        )?;
+        let mut rows = stmt.query(params![id])?;
+        if let Some(r) = rows.next()? {
+            Ok(Some(crate::ExtensionRow {
+                id: r.get(0)?,
+                version: r.get(1)?,
+                manifest_json: r.get(2)?,
+                path: r.get(3)?,
+                enabled: r.get::<_, i64>(4)? != 0,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn set_extension_enabled(&self, id: &str, enabled: bool) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE extensions SET enabled = ?2 WHERE id = ?1",
+            params![id, if enabled { 1i64 } else { 0i64 }],
+        )?;
+        Ok(())
+    }
+
+    fn remove_extension(&self, id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("DELETE FROM extensions WHERE id = ?1", params![id])?;
         Ok(())
     }
 }
